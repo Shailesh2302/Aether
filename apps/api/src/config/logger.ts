@@ -1,0 +1,30 @@
+import pino from 'pino';
+import { config } from './env.js';
+
+export const logger = pino({
+  level: config.log.level,
+  transport: config.nodeEnv !== 'production'
+    ? {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'SYS:standard',
+          ignore: 'pid,hostname',
+        },
+      }
+    : undefined,
+  formatters: {
+    level: (label) => {
+      return { level: label };
+    },
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+  base: {
+    service: 'omnimind-api',
+    env: config.nodeEnv,
+  },
+});
+
+export function createChildLogger(bindings: Record<string, unknown>) {
+  return logger.child(bindings);
+}

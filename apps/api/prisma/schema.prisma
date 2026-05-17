@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  name          String?
+  avatar        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  files         File[]
+  sessions      Session[]
+  clips         Clip[]
+  messages      Message[]
+  jobs          Job[]
+
+  @@map("users")
+}
+
+model File {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  originalName  String
+  mimeType      String
+  size          BigInt
+  path          String
+  url           String?
+  metadata      Json?
+  
+  status        FileStatus @default(PENDING)
+  processingJob String?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      Session[]
+  clips         Clip[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("files")
+}
+
+enum FileStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Session {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileId        String?
+  file          File?     @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  
+  title         String
+  type          SessionType
+  
+  metadata      Json?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  messages      Message[]
+
+  @@index([userId])
+  @@index([fileId])
+  @@map("sessions")
+}
+
+enum SessionType {
+  CHAT
+  SEARCH
+  CLIP
+  ANALYTICS
+}
+
+model Message {
+  id            String    @id @default(uuid())
+  sessionId     String
+  session       Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  role          MessageRole
+  content       String
+  metadata      Json?
+  
+  createdAt     DateTime  @default(now())
+
+  @@index([sessionId])
+  @@index([userId])
+  @@map("messages")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model Job {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type          JobType
+  status        JobStatus @default(QUEUED)
+  
+  input         Json
+  result        Json?
+  error         String?
+  
+  progress      Int       @default(0)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  completedAt   DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@map("jobs")
+}
+
+enum JobType {
+  VIDEO_PROCESSING
+  DOCUMENT_PROCESSING
+  CLIP_EXTRACTION
+  VECTOR_INDEXING
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Clip {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileId        String?
+  file          File?     @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  
+  title         String
+  description   String?
+  startTime     Float
+  endTime       Float
+  thumbnail     String?
+  videoUrl      String?
+  
+  tags          String[]
+  
+  metadata      Json?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([fileId])
+  @@map("clips")
+}

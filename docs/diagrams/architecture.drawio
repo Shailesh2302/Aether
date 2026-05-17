@@ -1,0 +1,148 @@
+<mxfile host="app.diagrams.net" modified="2024-01-15T00:00:00.000Z" agent="OmniMind" version="21.0.0" type="device">
+  <diagram id="architecture" name="OmniMind Architecture">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="OmniMind System Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=20;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="400" y="20" width="400" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Client Layer -->
+        <mxCell id="client_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="280" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="client_label" value="Client Layer" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="85" width="80" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="web_app" value="Web App (Next.js)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="110" width="100" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="mobile_app" value="Mobile App (React Native)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="220" y="110" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="api_client" value="API Client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="150" width="240" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Load Balancer -->
+        <mxCell id="nginx" value="Nginx Load Balancer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="440" y="110" width="160" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Connection lines -->
+        <mxCell id="line1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;" edge="1" parent="1" source="api_client" target="nginx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Backend -->
+        <mxCell id="backend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="680" y="80" width="320" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="backend_label" value="Backend Services" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="810" y="85" width="120" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="api_service" value="API Service (Rust/Python)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="110" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="websocket_service" value="WebSocket Server" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="150" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="worker_service" value="Background Workers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="700" y="190" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="embedding_service" value="Embedding Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="870" y="110" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="llm_service" value="LLM Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="870" y="150" width="110" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Connection -->
+        <mxCell id="line2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;" edge="1" parent="1" source="nginx" target="api_service">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="line3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;" edge="1" parent="1" source="nginx" target="websocket_service">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Database Layer -->
+        <mxCell id="db_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="440" y="320" width="560" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="db_label" value="Database Layer" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="325" width="100" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="postgres" value="PostgreSQL\n(Primary Data)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="460" y="350" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="redis" value="Redis\n(Cache/Session)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="600" y="350" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="qdrant" value="Qdrant\n(Vector Search)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="740" y="350" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="S3/MinIO\n(File Storage)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="880" y="350" width="100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Connection to DB -->
+        <mxCell id="line4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;dashed=1;" edge="1" parent="1" source="api_service" target="postgres">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="line5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;dashed=1;" edge="1" parent="1" source="api_service" target="redis">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="line6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;dashed=1;" edge="1" parent="1" source="embedding_service" target="qdrant">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="line7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;dashed=1;" edge="1" parent="1" source="api_service" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- External Services -->
+        <mxCell id="external_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="440" y="460" width="300" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="external_label" value="External Services" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="465" width="120" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="openai" value="OpenAI / Anthropic" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="460" y="490" width="130" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="auth0" value="Auth0 / Custom Auth" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="610" y="490" width="130" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Monitoring -->
+        <mxCell id="monitor_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="460" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="monitor_label" value="Monitoring" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="465" width="80" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="prometheus" value="Prometheus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="490" width="100" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="grafana" value="Grafana" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="220" y="490" width="100" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Connection to external -->
+        <mxCell id="line8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;dashed=1;" edge="1" parent="1" source="llm_service" target="openai">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="line9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;dashed=1;" edge="1" parent="1" source="api_service" target="auth0">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend" value="Data Flow&#xa;--- HTTP/WebSocket&#xa;- - - Database/API" style="text;html=1;strokeColor=#666666;fillColor=#ffffff;align=left;verticalAlign=top;fontSize=10;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="80" y="560" width="150" height="50" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

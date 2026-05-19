@@ -9,6 +9,7 @@ export function useUpload() {
     error,
     uploadFile,
     removeFile,
+    deleteUploadedFile,
     fetchFiles,
     deleteFile,
     clearError,
@@ -17,7 +18,7 @@ export function useUpload() {
   const handleUpload = useCallback(
     async (fileList: FileList | null) => {
       if (!fileList) return;
-      
+
       for (let i = 0; i < fileList.length; i++) {
         await uploadFile(fileList[i]);
       }
@@ -32,6 +33,7 @@ export function useUpload() {
     error,
     handleUpload,
     removeFile,
+    deleteUploadedFile,
     fetchFiles,
     deleteFile,
     clearError,

@@ -11,7 +11,8 @@ import { CheckCircle, Video, Music, Image, FileIcon, X, Play } from "lucide-reac
 export default function UploadPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { files, uploadedFiles, uploadFile, removeFile, fetchFiles, isLoading } = useUpload();
+  const { files, uploadedFiles, handleUpload, removeFile, deleteUploadedFile, fetchFiles, isLoading } = useUpload();
+  const allFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -28,16 +29,15 @@ export default function UploadPage() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (fileList) {
-      for (let i = 0; i < fileList.length; i++) {
-        await uploadFile(fileList[i]);
-      }
+      await handleUpload(fileList);
     }
   };
 
-  const getFileIcon = (type: string) => {
-    if (type.startsWith("video")) return <Video className="h-5 w-5 text-purple-500" />;
-    if (type.startsWith("audio")) return <Music className="h-5 w-5 text-blue-500" />;
-    if (type.startsWith("image")) return <Image className="h-5 w-5 text-green-500" />;
+  const getFileIcon = (type?: string) => {
+    if (!type) return <FileIcon className="h-5 w-5 text-gray-500" />;
+    if (type?.startsWith("video")) return <Video className="h-5 w-5 text-purple-500" />;
+    if (type?.startsWith("audio")) return <Music className="h-5 w-5 text-blue-500" />;
+    if (type?.startsWith("image")) return <Image className="h-5 w-5 text-green-500" />;
     return <FileIcon className="h-5 w-5 text-gray-500" />;
   };
 
@@ -96,7 +96,7 @@ export default function UploadPage() {
           <CardContent className="space-y-3">
             {files.map((file) => (
               <div key={file.id} className="flex items-center gap-4 p-3 rounded-lg border bg-card">
-                {getFileIcon(file.file.type)}
+                {getFileIcon(file.file?.type)}
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate text-sm">{file.file.name}</p>
                   <div className="flex items-center gap-2 mt-1">
@@ -116,13 +116,13 @@ export default function UploadPage() {
       {/* Uploaded Files */}
       <Card>
         <CardHeader>
-          <CardTitle>Your Files ({uploadedFiles.length})</CardTitle>
+          <CardTitle>Your Files ({allFiles.length})</CardTitle>
           <CardDescription>
             Files stored locally for demo
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {uploadedFiles.length === 0 ? (
+          {allFiles.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No files uploaded yet</p>
@@ -130,19 +130,19 @@ export default function UploadPage() {
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {uploadedFiles.map((file) => (
+              {allFiles.map((file) => (
                 <div key={file.id} className="relative group rounded-lg border overflow-hidden">
                   {/* Preview */}
                   <div className="aspect-video bg-muted flex items-center justify-center">
-                    {file.type.startsWith("video") ? (
+                    {file.type?.startsWith("video") ? (
                       <video src={file.url} className="w-full h-full object-cover" />
-                    ) : file.type.startsWith("image") ? (
+                    ) : file.type?.startsWith("image") ? (
                       <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
                     ) : (
                       getFileIcon(file.type)
                     )}
-                    {/* Play button overlay for videos */}
-                    {file.type.startsWith("video") && (
+{/* Play button overlay for videos */}
+                    {file.type?.startsWith("video") && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Play className="h-12 w-12 text-white" />
                       </div>
@@ -152,12 +152,12 @@ export default function UploadPage() {
                   <div className="p-3">
                     <p className="font-medium text-sm truncate">{file.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {(file.size / 1024 / 1024).toFixed(1)} MB
+                      {file.size ? (file.size / 1024 / 1024).toFixed(1) + " MB" : "Unknown size"}
                     </p>
                   </div>
                   {/* Delete button */}
                   <button
-                    onClick={() => removeFile(file.id)}
+                    onClick={() => deleteUploadedFile(file.id)}
                     className="absolute top-2 right-2 p-1 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <X className="h-4 w-4" />

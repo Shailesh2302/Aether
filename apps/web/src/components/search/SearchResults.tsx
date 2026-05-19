@@ -44,7 +44,7 @@ export function SearchResults({ results, isLoading, onResultClick }: SearchResul
           onClick={() => onResultClick?.(result)}
         >
           <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-            {result.fileName.match(/\.(mp4|webm|mov)$/i) ? (
+            {result.fileName?.match(/\.(mp4|webm|mov)$/i) ? (
               <Video className="h-5 w-5 text-muted-foreground" />
             ) : (
               <FileText className="h-5 w-5 text-muted-foreground" />

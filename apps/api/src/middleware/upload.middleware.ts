@@ -1,13 +1,13 @@
 import multer from 'multer';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { Request } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    cb(null, config.upload.uploadDir);
+    cb(null, config.storage.uploadDir);
   },
   filename: (_req, file, cb) => {
     const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;

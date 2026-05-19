@@ -19,7 +19,7 @@ export default function VideosPage() {
     fetchFiles();
   }, [fetchFiles]);
 
-  const videos = uploadedFiles.filter((f) => f.type.startsWith("video"));
+  const videos = (Array.isArray(uploadedFiles) ? uploadedFiles : []).filter((f) => f.type?.startsWith("video"));
 
   const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this video?")) {

@@ -105,7 +105,7 @@ class VectorService {
         throw new Error(`Search failed: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
       
       return data.result.map((p: { id: string; score: number; payload: Record<string, unknown> }) => ({
         id: p.id,
@@ -143,7 +143,7 @@ class VectorService {
         throw new Error(`Failed to get collections: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
       
       return data.result.map((c: { name: string; vectors: number; points: number }) => ({
         name: c.name,

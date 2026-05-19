@@ -20,9 +20,10 @@ export default function FilesPage() {
     fetchFiles();
   }, [fetchFiles]);
 
-  const filteredFiles = uploadedFiles.filter((file) => {
-    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filter === "all" || file.type.startsWith(filter);
+  const allFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
+  const filteredFiles = allFiles.filter((file) => {
+    const matchesSearch = file.name?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false;
+    const matchesFilter = filter === "all" || file.type?.startsWith(filter);
     return matchesSearch && matchesFilter;
   });
 
@@ -146,9 +147,9 @@ export default function FilesPage() {
               className="flex items-center gap-4 p-4 rounded-lg border bg-card"
             >
               <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-                {file.type.startsWith("video") && <Video className="h-5 w-5 text-muted-foreground" />}
-                {file.type.startsWith("audio") && <Music className="h-5 w-5 text-muted-foreground" />}
-                {file.type.startsWith("image") && <Image className="h-5 w-5 text-muted-foreground" />}
+                {file.type?.startsWith("video") && <Video className="h-5 w-5 text-muted-foreground" />}
+                {file.type?.startsWith("audio") && <Music className="h-5 w-5 text-muted-foreground" />}
+                {file.type?.startsWith("image") && <Image className="h-5 w-5 text-muted-foreground" />}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{file.name}</p>

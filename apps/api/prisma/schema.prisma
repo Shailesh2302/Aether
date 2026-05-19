@@ -163,6 +163,8 @@ model Clip {
   thumbnail     String?
   videoUrl      String?
   
+  status        ClipStatus @default(PENDING)
+  
   tags          String[]
   
   metadata      Json?
@@ -173,4 +175,11 @@ model Clip {
   @@index([userId])
   @@index([fileId])
   @@map("clips")
+}
+
+enum ClipStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }

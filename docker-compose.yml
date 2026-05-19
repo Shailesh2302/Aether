@@ -1,44 +1,7 @@
 version: '3.8'
 
 services:
-  # Infrastructure Services
-  postgres:
-    image: postgres:16-alpine
-    container_name: omnimind-postgres
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-omnimind}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - omnimind-network
-
-  redis:
-    image: redis:7-alpine
-    container_name: omnimind-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - omnimind-network
-
+  # Infrastructure Services (using cloud services)
   qdrant:
     image: qdrant/qdrant:v1.7.4
     container_name: omnimind-qdrant
@@ -52,6 +15,7 @@ services:
       QDRANT__SERVICE__GRPC_PORT: 6334
       QDRANT__SERVICE__HTTP_PORT: 6333
       QDRANT__LOG__LEVEL: INFO
+      QDRANT__SERVICE__API_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwic3ViamVjdCI6ImFwaS1rZXk6M2ZkYzE1YzYtNGYwMC00ODRhLWIxNGEtMDhkMGZiOWQxN2UwIn0.lwb1EbZvxlS2rkZcTj0W5bYpW7YC7-5bMZUghjVsjj0
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
       interval: 10s
@@ -72,23 +36,17 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3001
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=omnimind
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - POSTGRES_URL=postgresql://neondb_owner:npg_DaE1A8lfsyvM@ep-snowy-mountain-ah8iqbk4-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+      - REDIS_URL=rediss://default:XrxS1W4ZBoqd46elrCdzsb2hXdDuW2mW@redis-12625.c323.us-east-1-2.ec2.cloud.redislabs.com:12625
+      - REDIS_HOST=redis-12625.c323.us-east-1-2.ec2.cloud.redislabs.com
+      - REDIS_PORT=12625
+      - REDIS_PASSWORD=XrxS1W4ZBoqd46elrCdzsb2hXdDuW2mW
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - AI_SERVICE_URL=http://ai-service:3002
       - JWT_SECRET=${JWT_SECRET:-dev-secret}
-      - STORAGE_TYPE=local
+      - STORAGE_TYPE=cloudinary
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
       qdrant:
         condition: service_healthy
     volumes:
@@ -111,6 +69,7 @@ services:
       - PORT=3002
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      - NVIDIA_API_KEY=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
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-gpt-4}
       - LLM_TEMPERATURE=0.7
@@ -133,11 +92,9 @@ services:
     restart: unless-stopped
     environment:
       - RUST_LOG=info
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    depends_on:
-      redis:
-        condition: service_healthy
+      - REDIS_URL=rediss://default:XrxS1W4ZBoqd46elrCdzsb2hXdDuW2mW@redis-12625.c323.us-east-1-2.ec2.cloud.redislabs.com:12625
+      - REDIS_HOST=redis-12625.c323.us-east-1-2.ec2.cloud.redislabs.com
+      - REDIS_PORT=12625
     volumes:
       - ./apps/rust-worker:/app
       - video_uploads:/tmp/omnimind
@@ -199,8 +156,6 @@ services:
       - omnimind-network
 
 volumes:
-  postgres_data:
-  redis_data:
   qdrant_data:
   uploads:
   clips:

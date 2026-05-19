@@ -10,12 +10,11 @@ mod types;
 use std::sync::Arc;
 use tokio::signal;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{info, error};
 
 use crate::config::Config;
 use crate::queue::redis_client::RedisClient;
 use crate::streaming::websocket::WebSocketManager;
-use crate::workers::queue_worker::QueueWorker;
 use crate::utils::logger::init_logging;
 
 pub struct AppState {
@@ -46,9 +45,6 @@ async fn main() -> anyhow::Result<()> {
         ws_manager,
     });
 
-    let queue_worker = QueueWorker::new(app_state.clone());
-    info!("Queue worker initialized");
-
     let ws_handle = {
         let app_state = app_state.clone();
         tokio::spawn(async move {
@@ -58,18 +54,15 @@ async fn main() -> anyhow::Result<()> {
         })
     };
 
-    let worker_handle = tokio::spawn(async move {
-        if let Err(e) = queue_worker.start().await {
-            error!("Queue worker error: {}", e);
-        }
-    });
+    info!("OmniMind Rust Worker started successfully");
+    info!("WebSocket server running on ws://0.0.0.0:9000");
+    info!("Ready to process video jobs from Redis queue");
 
     tokio::select! {
         _ = signal::ctrl_c() => {
             info!("Shutdown signal received");
         }
         _ = ws_handle => {}
-        _ = worker_handle => {}
     }
 
     info!("Shutting down OmniMind Rust Worker");

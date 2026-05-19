@@ -8,29 +8,127 @@ export interface StorageResult {
   path: string;
   url: string;
   size: number;
+  publicId?: string;
+}
+
+interface CloudinaryUploadResult {
+  secure_url: string;
+  public_id: string;
+  bytes: number;
+  format: string;
 }
 
 class StorageService {
-  private uploadDir: string;
-  private clipsDir: string;
-  private storageType: 'local' | 's3';
+  private cloudName: string;
+  private apiKey: string;
+  private apiSecret: string;
+  private uploadPreset: string;
+  private storageType: 'local' | 'cloudinary' | 's3';
 
   constructor() {
-    this.uploadDir = config.upload.uploadDir;
-    this.clipsDir = config.upload.clipsDir;
-    this.storageType = config.storage.type as 'local' | 's3';
+    this.cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'dt50pmuar';
+    this.apiKey = process.env.CLOUDINARY_API_KEY || '897834594944128';
+    this.apiSecret = process.env.CLOUDINARY_API_SECRET || 'jeyBbFwh6NtIavUzGNrXMmQ8YPI';
+    this.uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || 'omnimind';
+    this.storageType = (process.env.STORAGE_TYPE || 'cloudinary') as 'local' | 'cloudinary' | 's3';
   }
 
   async initialize(): Promise<void> {
-    await fs.mkdir(this.uploadDir, { recursive: true });
-    await fs.mkdir(this.clipsDir, { recursive: true });
-    logger.info({ uploadDir: this.uploadDir, clipsDir: this.clipsDir }, 'Storage initialized');
+    if (this.storageType === 'local') {
+      const uploadDir = config.storage.uploadDir;
+      const clipsDir = config.storage.clipsDir;
+      await fs.mkdir(uploadDir, { recursive: true });
+      await fs.mkdir(clipsDir, { recursive: true });
+      logger.info({ uploadDir, clipsDir }, 'Local storage initialized');
+    } else {
+      logger.info({ cloudName: this.cloudName }, 'Cloudinary storage initialized');
+    }
   }
 
   async saveFile(buffer: Buffer, originalName: string): Promise<StorageResult> {
+    if (this.storageType === 'cloudinary') {
+      return this.uploadToCloudinary(buffer, originalName, 'raw');
+    }
+    return this.saveFileLocal(buffer, originalName);
+  }
+
+  async saveClip(buffer: Buffer, originalName: string): Promise<StorageResult> {
+    if (this.storageType === 'cloudinary') {
+      return this.uploadToCloudinary(buffer, originalName, 'video');
+    }
+    return this.saveClipLocal(buffer, originalName);
+  }
+
+  private async uploadToCloudinary(buffer: Buffer, originalName: string, resourceType: 'image' | 'video' | 'raw' | 'auto'): Promise<StorageResult> {
+    const ext = path.extname(originalName).toLowerCase();
+    const publicId = `omnimind/${resourceType}/${uuidv4()}${ext}`;
+    
+    const base64 = buffer.toString('base64');
+    const mimeType = this.getMimeType(ext);
+
+    const formData = new URLSearchParams();
+    formData.append('file', `data:${mimeType};base64,${base64}`);
+    formData.append('public_id', publicId);
+    formData.append('upload_preset', this.uploadPreset);
+    formData.append('resource_type', resourceType);
+
+    try {
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${this.cloudName}/${resourceType}/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({ error: errorText, status: response.status }, 'Cloudinary upload failed');
+        throw new Error(`Cloudinary upload failed: ${response.status}`);
+      }
+
+      const result = await response.json() as CloudinaryUploadResult;
+      
+      logger.info({ publicId: result.public_id, url: result.secure_url }, 'File uploaded to Cloudinary');
+
+      return {
+        path: result.public_id,
+        url: result.secure_url,
+        size: result.bytes,
+        publicId: result.public_id,
+      };
+    } catch (error) {
+      logger.error({ error, originalName }, 'Failed to upload to Cloudinary');
+      throw error;
+    }
+  }
+
+  private getMimeType(ext: string): string {
+    const mimeTypes: Record<string, string> = {
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.avi': 'video/avi',
+      '.mov': 'video/quicktime',
+      '.mkv': 'video/x-matroska',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.xls': 'application/vnd.ms-excel',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+    };
+    return mimeTypes[ext] || 'application/octet-stream';
+  }
+
+  private async saveFileLocal(buffer: Buffer, originalName: string): Promise<StorageResult> {
     const ext = path.extname(originalName);
     const filename = `${uuidv4()}${ext}`;
-    const filePath = path.join(this.uploadDir, filename);
+    const filePath = path.join(config.storage.uploadDir, filename);
     
     await fs.writeFile(filePath, buffer);
     
@@ -43,10 +141,10 @@ class StorageService {
     };
   }
 
-  async saveClip(buffer: Buffer, originalName: string): Promise<StorageResult> {
+  private async saveClipLocal(buffer: Buffer, originalName: string): Promise<StorageResult> {
     const ext = path.extname(originalName);
     const filename = `${uuidv4()}${ext}`;
-    const filePath = path.join(this.clipsDir, filename);
+    const filePath = path.join(config.storage.clipsDir, filename);
     
     await fs.writeFile(filePath, buffer);
     
@@ -60,20 +158,56 @@ class StorageService {
   }
 
   async deleteFile(filePath: string): Promise<void> {
-    try {
-      await fs.unlink(filePath);
-      logger.info({ filePath }, 'File deleted');
-    } catch (error) {
-      logger.error({ error, filePath }, 'Failed to delete file');
-      throw error;
+    if (this.storageType === 'cloudinary') {
+      try {
+        const deleteUrl = `https://api.cloudinary.com/v1_1/${this.cloudName}/resources/image/upload?public_id=${encodeURIComponent(filePath)}`;
+        
+        const response = await fetch(deleteUrl, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Basic ${Buffer.from(`${this.apiKey}:${this.apiSecret}`).toString('base64')}`,
+          },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.warn({ error: errorText, filePath }, 'Cloudinary delete failed, file may not exist');
+        } else {
+          logger.info({ filePath }, 'File deleted from Cloudinary');
+        }
+      } catch (error) {
+        logger.error({ error, filePath }, 'Failed to delete from Cloudinary');
+        throw error;
+      }
+    } else {
+      try {
+        await fs.unlink(filePath);
+        logger.info({ filePath }, 'File deleted from local storage');
+      } catch (error) {
+        logger.error({ error, filePath }, 'Failed to delete local file');
+        throw error;
+      }
     }
   }
 
   async getFile(filePath: string): Promise<Buffer> {
+    if (this.storageType === 'cloudinary') {
+      const response = await fetch(filePath);
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
     return fs.readFile(filePath);
   }
 
   async fileExists(filePath: string): Promise<boolean> {
+    if (this.storageType === 'cloudinary') {
+      try {
+        const response = await fetch(`https://res.cloudinary.com/${this.cloudName}/image/resolve?public_id=${filePath}`);
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }
     try {
       await fs.access(filePath);
       return true;
@@ -83,15 +217,29 @@ class StorageService {
   }
 
   getFileUrl(relativePath: string): string {
-    return `${config.apiUrl}${relativePath}`;
+    if (this.storageType === 'cloudinary') {
+      return `https://res.cloudinary.com/${this.cloudName}/raw/upload/${relativePath}`;
+    }
+    return `${config.storage.apiUrl}${relativePath}`;
+  }
+
+  async getDownloadUrl(publicId: string, originalName: string): Promise<string> {
+    if (this.storageType === 'cloudinary') {
+      return `https://res.cloudinary.com/${this.cloudName}/video/upload/${publicId}`;
+    }
+    return this.getFileUrl(publicId);
   }
 
   getUploadDir(): string {
-    return this.uploadDir;
+    return config.storage.uploadDir;
   }
 
   getClipsDir(): string {
-    return this.clipsDir;
+    return config.storage.clipsDir;
+  }
+
+  getStorageType(): string {
+    return this.storageType;
   }
 }
 

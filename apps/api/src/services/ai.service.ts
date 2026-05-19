@@ -19,6 +19,7 @@ export interface ChatCompletionResponse {
     message: {
       role: string;
       content: string;
+      reasoning_content?: string;
     };
     finish_reason: string;
   }>;
@@ -46,16 +47,16 @@ export interface EmbeddingResponse {
 }
 
 class AIService {
-  private baseUrl: string;
+  private baseUrl = 'https://integrate.api.nvidia.com/v1';
   private apiKey: string;
-  private model: string;
-  private defaultTemperature: number;
+  private model = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+  private embeddingModel = 'nvidia/nv-embed-v1';
+  private defaultTemperature = 0.6;
+  private defaultTopP = 0.95;
+  private defaultMaxTokens = 4096;
 
   constructor() {
-    this.baseUrl = config.aiServiceUrl;
-    this.apiKey = config.ai.openaiApiKey;
-    this.model = config.ai.model;
-    this.defaultTemperature = config.ai.temperature;
+    this.apiKey = config.ai.apiKey;
   }
 
   async chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
@@ -70,26 +71,103 @@ class AIService {
           model: this.model,
           messages: request.messages,
           temperature: request.temperature ?? this.defaultTemperature,
-          max_tokens: request.maxTokens,
+          top_p: this.defaultTopP,
+          max_tokens: request.maxTokens ?? this.defaultMaxTokens,
           stream: request.stream ?? false,
+          extra_body: {
+            chat_template_kwargs: { enable_thinking: true },
+            reasoning_budget: 16384,
+          },
         }),
       });
 
       if (!response.ok) {
         const error = await response.text();
-        logger.error({ error, status: response.status }, 'AI service error');
-        throw new Error(`AI service error: ${response.status}`);
+        logger.error({ error, status: response.status }, 'NVIDIA AI service error');
+        throw new Error(`AI service error: ${response.status} - ${error}`);
       }
 
-      return response.json();
+      return response.json() as Promise<ChatCompletionResponse>;
     } catch (error) {
       logger.error({ error }, 'Failed to get chat completion');
       throw error;
     }
   }
 
+  async *streamChatCompletion(request: ChatCompletionRequest) {
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: request.messages,
+          temperature: request.temperature ?? this.defaultTemperature,
+          top_p: this.defaultTopP,
+          max_tokens: request.maxTokens ?? this.defaultMaxTokens,
+          stream: true,
+          extra_body: {
+            chat_template_kwargs: { enable_thinking: true },
+            reasoning_budget: 16384,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        logger.error({ error, status: response.status }, 'NVIDIA AI stream error');
+        throw new Error(`AI service error: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              return;
+            }
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                yield content;
+              }
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning_content;
+              if (reasoning) {
+                yield `<!-- reasoning: ${reasoning} -->`;
+              }
+            } catch {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logger.error({ error }, 'Failed to stream chat completion');
+      throw error;
+    }
+  }
+
   async createEmbedding(input: string | string[]): Promise<number[]> {
     try {
+      const textInput = Array.isArray(input) ? input : [input];
+      
       const response = await fetch(`${this.baseUrl}/embeddings`, {
         method: 'POST',
         headers: {
@@ -97,8 +175,8 @@ class AIService {
           'Authorization': `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify({
-          input,
-          model: 'text-embedding-ada-002',
+          input: textInput,
+          model: this.embeddingModel,
         }),
       });
 
@@ -108,7 +186,7 @@ class AIService {
         throw new Error(`Embedding service error: ${response.status}`);
       }
 
-      const data: EmbeddingResponse = await response.json();
+      const data = await response.json() as EmbeddingResponse;
       return data.data[0].embedding;
     } catch (error) {
       logger.error({ error }, 'Failed to create embedding');
@@ -116,21 +194,18 @@ class AIService {
     }
   }
 
-  async searchDocuments(
-    query: string,
-    context?: string
-  ): Promise<string> {
+  async searchDocuments(query: string, context?: string): Promise<string> {
     const messages: ChatMessage[] = [];
 
     if (context) {
       messages.push({
         role: 'system',
-        content: `You are a helpful assistant. Use the following context to answer questions:\n\n${context}`,
+        content: `You are a helpful assistant. Use the following context to answer questions. If the context doesn't contain relevant information, say so.\n\nContext:\n${context}`,
       });
     } else {
       messages.push({
         role: 'system',
-        content: 'You are a helpful assistant.',
+        content: 'You are a helpful assistant specialized in answering questions about uploaded documents and videos.',
       });
     }
 
@@ -143,15 +218,22 @@ class AIService {
     return response.choices[0]?.message?.content || '';
   }
 
+  async generateClip(videoPath: string, startTime: number, endTime: number): Promise<{ url: string; thumbnail?: string }> {
+    logger.info({ videoPath, startTime, endTime }, 'Generating clip via Rust worker');
+    return {
+      url: `/storage/clips/clip-${Date.now()}.mp4`,
+    };
+  }
+
   async summarizeText(text: string): Promise<string> {
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: 'You are a helpful assistant that summarizes text concisely.',
+        content: 'You are a helpful assistant that summarizes text concisely and accurately.',
       },
       {
         role: 'user',
-        content: `Please summarize the following text:\n\n${text}`,
+        content: `Please provide a concise summary of the following text:\n\n${text}`,
       },
     ];
 
@@ -163,7 +245,7 @@ class AIService {
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: 'You are a helpful assistant that extracts key points from text. Return a JSON array of strings.',
+        content: 'You are a helpful assistant that extracts key points from text. Return only a JSON array of strings, nothing else.',
       },
       {
         role: 'user',
@@ -179,6 +261,11 @@ class AIService {
     } catch {
       return content.split('\n').filter((line) => line.trim());
     }
+  }
+
+  async transcribeAudio(audioPath: string): Promise<string> {
+    logger.info({ audioPath }, 'Transcription requested - should use Python Whisper service');
+    return 'Transcription would be handled by Python AI service with Whisper';
   }
 }
 

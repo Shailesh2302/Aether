@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 from functools import lru_cache
 
 
@@ -10,15 +10,16 @@ class Settings(BaseSettings):
 
     API_V1_PREFIX: str = "/api/v1"
 
-    OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL: str = "gpt-4-turbo-preview"
-    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
-
-    QDRANT_HOST: str = "localhost"
+    NVIDIA_API_KEY: str = "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"
+    NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
+    NVIDIA_CHAT_MODEL: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+    NVIDIA_EMBEDDING_MODEL: str = "nvidia/nv-embed-v1"
+    
+    QDRANT_HOST: str = "2e308c4b-9092-44ce-b8fd-206f1fc3294e.sa-east-1-0.aws.cloud.qdrant.io"
     QDRANT_PORT: int = 6333
     QDRANT_GRPC_PORT: int = 6334
     QDRANT_COLLECTION: str = "omnimind"
-    QDRANT_API_KEY: Optional[str] = None
+    QDRANT_API_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwic3ViamVjdCI6ImFwaS1rZXk6M2ZkYzE1YzYtNGYwMC00ODRhLWIxNGEtMDhkMGZiOWQxN2UwIn0.lwb1EbZvxlS2rkZcTj0W5bYpW7YC7-5bMZUghjVsjj0"
 
     SENTENCE_TRANSFORMER_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -35,7 +36,7 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
-    CORS_ORIGINS: list = ["*"]
+    CORS_ORIGINS: List[str] = ["*"]
 
     class Config:
         env_file = ".env"

@@ -17,7 +17,8 @@ export default function ClipsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [playingClip, setPlayingClip] = useState<Clip | null>(null);
 
-  const videos = uploadedFiles.filter((f) => f.type.startsWith("video"));
+  const allFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
+  const videos = allFiles.filter((f) => f.type?.startsWith("video"));
 
   const handleCreateClip = (file: File) => {
     setSelectedFile(file);
@@ -124,7 +125,7 @@ export default function ClipsPage() {
             <div className="space-y-4">
               <h3 className="font-semibold">{playingClip.name}</h3>
               <VideoPlayer
-                src={uploadedFiles.find((f) => f.id === playingClip.fileId)?.url || ""}
+                src={allFiles.find((f) => f.id === playingClip.fileId)?.url || ""}
                 initialTime={playingClip.startTime}
               />
             </div>

@@ -16,8 +16,9 @@ export default function DashboardPage() {
     fetchFiles();
   }, [fetchFiles]);
 
-  const recentFiles = uploadedFiles.slice(0, 5);
-  const totalSize = uploadedFiles.reduce((acc, file) => acc + file.size, 0);
+  const files = Array.isArray(uploadedFiles) ? uploadedFiles : [];
+  const recentFiles = files.slice(0, 5);
+  const totalSize = files.reduce((acc, file) => acc + (file.size || 0), 0);
 
   return (
     <div className="p-6 lg:p-8 space-y-8">
@@ -35,9 +36,9 @@ export default function DashboardPage() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{uploadedFiles.length}</div>
+            <div className="text-2xl font-bold">{files.length}</div>
             <p className="text-xs text-muted-foreground">
-              {uploadedFiles.filter(f => f.type.startsWith("video")).length} videos, {uploadedFiles.filter(f => f.type.startsWith("audio")).length} audio
+              {files.filter(f => f.type?.startsWith("video")).length} videos, {files.filter(f => f.type?.startsWith("audio")).length} audio
             </p>
           </CardContent>
         </Card>
@@ -166,7 +167,7 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <span className="text-xs text-muted-foreground capitalize">
-                    {file.type.split("/")[1]}
+                    {file.type?.split("/")[1] || "file"}
                   </span>
                 </div>
               ))}

@@ -14,8 +14,8 @@ export async function generateSecureToken(length = 32): Promise<string> {
   return buffer.toString('hex');
 }
 
-export function generateJwtToken(payload: object, expiresIn = config.jwt.expiry): string {
-  return jwt.sign(payload, config.jwt.secret, { expiresIn });
+export function generateJwtToken(payload: object, expiresIn: string = config.jwt.expiry): string {
+  return jwt.sign(payload, config.jwt.secret, { expiresIn: expiresIn as any });
 }
 
 export function verifyJwtToken(token: string): object | string {
@@ -105,7 +105,7 @@ export function parseQueryBool(value: string | undefined, defaultValue: boolean)
   return value.toLowerCase() === 'true';
 }
 
-export function getFileUrl(filePath: string, baseUrl = config.apiUrl): string {
+export function getFileUrl(filePath: string, baseUrl = config.storage.apiUrl): string {
   const path = filePath.replace(/^\//, '');
   return `${baseUrl}/storage/${path}`;
 }

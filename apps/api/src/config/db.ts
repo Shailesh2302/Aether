@@ -9,24 +9,12 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: [
-      { level: 'query', emit: 'event' },
-      { level: 'error', emit: 'stdout' },
-      { level: 'warn', emit: 'stdout' },
-    ],
+    log: ['warn', 'error'],
   });
 
 if (config.nodeEnv !== 'production') {
   globalForPrisma.prisma = prisma;
 }
-
-prisma.$on('error', (e) => {
-  logger.error(e, 'Prisma Error');
-});
-
-prisma.$on('query', (e) => {
-  logger.debug({ query: e.query, duration: e.duration }, 'Prisma Query');
-});
 
 export async function connectDatabase() {
   try {

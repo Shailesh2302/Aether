@@ -1,9 +1,11 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 interface User {
   id: string;
   email: string;
   name: string;
+  avatar?: string;
 }
 
 interface AuthState {
@@ -17,78 +19,91 @@ interface AuthState {
   checkAuth: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  isLoading: false,
-  isAuthenticated: false,
-  error: null,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      isLoading: false,
+      isAuthenticated: false,
+      error: null,
 
-  login: async (email: string, password: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      // Demo mode - simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      if (email && password.length >= 4) {
-        const user = {
-          id: "demo-user-1",
-          email,
-          name: email.split("@")[0],
-        };
-        localStorage.setItem("omnimind_user", JSON.stringify(user));
-        set({ user, isAuthenticated: true, isLoading: false });
-      } else {
-        throw new Error("Invalid credentials");
-      }
-    } catch (error: any) {
-      set({ error: error.message || "Login failed", isLoading: false });
-      throw error;
-    }
-  },
+      login: async (email: string, password: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await fetch("http://localhost:3001/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
 
-  register: async (email: string, password: string, name: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      if (!email || !password || !name) {
-        throw new Error("Please fill all fields");
-      }
-      
-      if (password.length < 4) {
-        throw new Error("Password must be at least 4 characters");
-      }
-      
-      const user = {
-        id: "demo-user-" + Date.now(),
-        email,
-        name,
-      };
-      localStorage.setItem("omnimind_user", JSON.stringify(user));
-      set({ user, isAuthenticated: true, isLoading: false });
-    } catch (error: any) {
-      set({ error: error.message || "Registration failed", isLoading: false });
-      throw error;
-    }
-  },
+          const data = await response.json();
 
-  logout: async () => {
-    localStorage.removeItem("omnimind_user");
-    set({ user: null, isAuthenticated: false, isLoading: false });
-  },
+          if (!response.ok) {
+            throw new Error(data.error || "Login failed");
+          }
 
-  checkAuth: async () => {
-    set({ isLoading: true });
-    try {
-      const userStr = localStorage.getItem("omnimind_user");
-      if (userStr) {
-        const user = JSON.parse(userStr);
-        set({ user, isAuthenticated: true, isLoading: false });
-      } else {
+          localStorage.setItem("token", data.token);
+          set({ user: data.user, isAuthenticated: true, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message || "Login failed", isLoading: false });
+          throw error;
+        }
+      },
+
+      register: async (email: string, password: string, name: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await fetch("http://localhost:3001/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password, name }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || "Registration failed");
+          }
+
+          localStorage.setItem("token", data.token);
+          set({ user: data.user, isAuthenticated: true, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message || "Registration failed", isLoading: false });
+          throw error;
+        }
+      },
+
+      logout: async () => {
+        localStorage.removeItem("token");
         set({ user: null, isAuthenticated: false, isLoading: false });
-      }
-    } catch {
-      set({ user: null, isAuthenticated: false, isLoading: false });
+      },
+
+      checkAuth: async () => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          set({ isLoading: false });
+          return;
+        }
+        set({ isLoading: true });
+        try {
+          const response = await fetch("http://localhost:3001/api/auth/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (response.ok) {
+            const user = await response.json();
+            set({ user, isAuthenticated: true, isLoading: false });
+          } else {
+            localStorage.removeItem("token");
+            set({ user: null, isAuthenticated: false, isLoading: false });
+          }
+        } catch {
+          set({ isLoading: false });
+        }
+      },
+    }),
+    {
+      name: "omnimind-auth",
+      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
     }
-  },
-}));
+  )
+);

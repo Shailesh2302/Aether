@@ -18,7 +18,7 @@ export function ChatMessageComponent({ message }: ChatMessageProps) {
       )}
     >
       <Avatar className="h-8 w-8">
-        <AvatarImage src={isUser ? undefined : "/bot-avatar.png"} />
+        <AvatarImage src={undefined} />
         <AvatarFallback className={isUser ? "bg-primary" : "bg-muted"}>
           {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
         </AvatarFallback>

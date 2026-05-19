@@ -4,7 +4,7 @@ import { logger } from '../config/logger.js';
 import { config } from '../config/env.js';
 
 export const requestLogger = morgan(
-  config.log.format === 'json' ? 'json' : 'combined',
+  'combined',
   {
     stream: {
       write: (message: string) => {

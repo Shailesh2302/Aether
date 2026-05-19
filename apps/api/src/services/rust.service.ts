@@ -45,7 +45,7 @@ class RustService {
         throw new Error(`Rust worker error: ${error}`);
       }
 
-      const result = await response.json();
+      const result = await response.json() as any;
       logger.info({ jobId: job.id, result }, 'Video processing completed');
       
       return {
@@ -84,7 +84,7 @@ class RustService {
         throw new Error(`Rust worker error: ${error}`);
       }
 
-      const result = await response.json();
+      const result = await response.json() as any;
       logger.info({ jobId: job.id, result }, 'Document processing completed');
       
       return {
@@ -122,7 +122,7 @@ class RustService {
         throw new Error(`Rust worker error: ${error}`);
       }
 
-      const result = await response.json();
+      const result = await response.json() as any;
       logger.info({ jobId: job.id, result }, 'Audio extraction completed');
       
       return {
@@ -159,7 +159,7 @@ class RustService {
         throw new Error(`Rust worker error: ${error}`);
       }
 
-      const result = await response.json();
+      const result = await response.json() as any;
       logger.info({ jobId: job.id, result }, 'Transcription completed');
       
       return {

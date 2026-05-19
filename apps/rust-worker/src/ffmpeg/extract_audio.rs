@@ -1,6 +1,6 @@
 use std::process::Stdio;
 use tokio::process::Command;
-use tracing::{info, debug};
+use tracing::{info};
 
 pub async fn extract(input: &str, output: &str) -> anyhow::Result<()> {
     info!("Extracting audio from {} to {}", input, output);
@@ -19,12 +19,10 @@ pub async fn extract(input: &str, output: &str) -> anyhow::Result<()> {
     .stdout(Stdio::null())
     .stderr(Stdio::piped());
 
-    debug!("Running: ffmpeg {}", cmd.get_args().collect::<Vec<_>>().join(" "));
+    let out = cmd.output().await?;
 
-    let output = cmd.output().await?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
         anyhow::bail!("FFmpeg failed: {}", stderr);
     }
 
@@ -65,10 +63,10 @@ pub async fn extract_with_options(
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
 
-    let output = cmd.output().await?;
+    let out = cmd.output().await?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
         anyhow::bail!("FFmpeg failed: {}", stderr);
     }
 

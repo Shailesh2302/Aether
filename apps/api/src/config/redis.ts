@@ -11,6 +11,8 @@ export const redis = new Redis({
     const delay = Math.min(times * 50, 2000);
     return delay;
   },
+  tls: {},
+  connectTimeout: 10000,
 });
 
 redis.on('connect', () => {

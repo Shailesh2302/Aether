@@ -26,7 +26,8 @@ export const useSearchStore = create<SearchState>((set) => ({
     set({ isLoading: true, error: null, query });
 
     try {
-      const results = await searchApi.search(query);
+      const data = await searchApi.search(query);
+      const results = Array.isArray(data) ? data : (data.results ?? []);
       set({ results, isLoading: false });
     } catch (error: any) {
       set({

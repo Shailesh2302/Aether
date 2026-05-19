@@ -99,7 +99,7 @@ export const authApi = {
 export const filesApi = {
   list: async () => {
     const response = await api.get("/files");
-    return response.data;
+    return response.data.files;
   },
   upload: async (file: globalThis.File, onProgress?: (progress: number) => void) => {
     const formData = new FormData();
@@ -112,7 +112,16 @@ export const filesApi = {
         }
       },
     });
-    return response.data;
+    const data = response.data;
+    const f = data.file ?? data;
+    return {
+      id: f.id,
+      name: f.originalName ?? f.name,
+      type: f.mimeType,
+      size: f.size,
+      url: "",
+      createdAt: f.createdAt,
+    };
   },
   delete: async (id: string) => {
     const response = await api.delete(`/files/${id}`);

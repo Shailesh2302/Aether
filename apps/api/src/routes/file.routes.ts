@@ -31,7 +31,8 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
         updatedAt: true,
       },
     });
-    res.json({ files });
+    const serialized = files.map(f => ({ ...f, size: Number(f.size) }));
+    res.json({ files: serialized });
   } catch (error) {
     next(error);
   }
@@ -126,8 +127,7 @@ router.patch(
           updatedAt: true,
         },
       });
-
-      res.json({ file: updated });
+      res.json({ file: { ...updated, size: Number(updated.size) } });
     } catch (error) {
       next(error);
     }

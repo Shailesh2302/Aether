@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  disable: {
+    serviceWorker: true,
+  },
   experimental: {
     serverActions: {
       allowedOrigins: ['localhost:3000'],

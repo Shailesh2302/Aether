@@ -41,10 +41,16 @@ class QueueService {
   private clipQueueName = 'omnimind:clip:queue';
 
   constructor() {
-    const redisUrl = process.env.REDIS_URL || `rediss://default:${config.redis.password}@${config.redis.host}:${config.redis.port}`;
-    
-    this.redis = new Redis(redisUrl, {
-      lazyConnect: true,
+    this.redis = new Redis({
+      host: config.redis.host,
+      port: config.redis.port,
+      password: config.redis.password,
+      maxRetriesPerRequest: 1,
+      retryStrategy(times) {
+        return null;
+      },
+      enableOfflineQueue: false,
+      connectTimeout: 5000,
     });
 
     this.redis.on('connect', () => {

@@ -92,6 +92,29 @@ router.post(
           where: { id: file.id },
           data: { status: 'PENDING' as any },
         });
+
+        try {
+          const absolutePath = path.resolve(config.storage.uploadDir, storageResult.path.split('/').pop() || '');
+          const aiResponse = await fetch(`${config.aiServiceUrl}/api/v1/documents/index`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              file_id: file.id,
+              file_path: absolutePath,
+              mime_type: mimeType,
+              user_id: req.user!.userId,
+            }),
+          });
+          if (aiResponse.ok) {
+            logger.info({ fileId: file.id }, 'AI indexing triggered successfully');
+            await prisma.file.update({
+              where: { id: file.id },
+              data: { status: 'COMPLETED' as any },
+            });
+          }
+        } catch (err) {
+          logger.warn({ err }, 'AI indexing failed, will process via queue');
+        }
       } else if (isDocument) {
         await queueService.addDocumentProcessingJob({
           fileId: file.id,
@@ -104,6 +127,29 @@ router.post(
           where: { id: file.id },
           data: { status: 'PENDING' as any },
         });
+
+        try {
+          const absolutePath = path.resolve(config.storage.uploadDir, storageResult.path.split('/').pop() || '');
+          const aiResponse = await fetch(`${config.aiServiceUrl}/api/v1/documents/index`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              file_id: file.id,
+              file_path: absolutePath,
+              mime_type: mimeType,
+              user_id: req.user!.userId,
+            }),
+          });
+          if (aiResponse.ok) {
+            logger.info({ fileId: file.id }, 'AI indexing triggered successfully');
+            await prisma.file.update({
+              where: { id: file.id },
+              data: { status: 'COMPLETED' as any },
+            });
+          }
+        } catch (err) {
+          logger.warn({ err }, 'AI indexing failed, will process via queue');
+        }
       }
 
       logger.info({

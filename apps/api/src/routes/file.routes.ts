@@ -48,7 +48,21 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: N
       return res.status(404).json({ error: 'File not found' });
     }
 
-    res.json({ file });
+    res.json({
+      file: {
+        id: file.id,
+        name: file.name,
+        originalName: file.originalName,
+        mimeType: file.mimeType,
+        size: Number(file.size),
+        path: file.path,
+        url: file.url,
+        status: file.status,
+        metadata: file.metadata,
+        createdAt: file.createdAt,
+        updatedAt: file.updatedAt,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -98,12 +112,12 @@ router.patch(
   '/:id',
   authenticate,
   [
-    body('name').optional().isLength({ min: 1 }).withMessage('Name cannot be empty'),
+    body('status').optional().isIn(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']).withMessage('Invalid status'),
   ],
   validateRequest,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { name } = req.body;
+      const { name, status, metadata } = req.body;
 
       const file = await prisma.file.findFirst({
         where: { id: req.params.id, userId: req.user!.userId },
@@ -113,21 +127,34 @@ router.patch(
         return res.status(404).json({ error: 'File not found' });
       }
 
+      const updateData: any = {};
+      if (name) updateData.name = name;
+      if (status) updateData.status = status;
+      if (metadata) updateData.metadata = metadata;
+
       const updated = await prisma.file.update({
         where: { id: req.params.id },
-        data: { name },
+        data: updateData,
         select: {
           id: true,
           name: true,
           originalName: true,
           mimeType: true,
           size: true,
+          path: true,
+          url: true,
           status: true,
+          metadata: true,
           createdAt: true,
           updatedAt: true,
         },
       });
-      res.json({ file: { ...updated, size: Number(updated.size) } });
+      res.json({
+        file: {
+          ...updated,
+          size: Number(updated.size),
+        },
+      });
     } catch (error) {
       next(error);
     }

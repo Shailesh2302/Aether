@@ -35,35 +35,57 @@ export interface ClipJobData {
 }
 
 class QueueService {
-  private redis: Redis;
+  private redis: Redis | null = null;
+  private redisConnected = false;
   private videoQueueName = 'omnimind:video:queue';
   private documentQueueName = 'omnimind:document:queue';
   private clipQueueName = 'omnimind:clip:queue';
 
   constructor() {
-    this.redis = new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      password: config.redis.password,
-      maxRetriesPerRequest: 1,
-      retryStrategy(times) {
-        return null;
-      },
-      enableOfflineQueue: false,
-      connectTimeout: 5000,
-    });
-
-    this.redis.on('connect', () => {
-      logger.info('Redis connected for queue service');
-    });
-
-    this.redis.on('error', (err) => {
-      logger.error({ err }, 'Redis connection error');
-    });
+    this.initRedis();
   }
 
-  async connect() {
-    await this.redis.connect();
+  private initRedis() {
+    try {
+      this.redis = new Redis({
+        host: config.redis.host,
+        port: config.redis.port,
+        password: config.redis.password,
+        maxRetriesPerRequest: 1,
+        retryStrategy(times) {
+          return null;
+        },
+        enableOfflineQueue: false,
+        connectTimeout: 5000,
+      });
+
+      this.redis.on('connect', () => {
+        this.redisConnected = true;
+        logger.info('Redis connected for queue service');
+      });
+
+      this.redis.on('error', (err) => {
+        this.redisConnected = false;
+        logger.warn({ err }, 'Redis connection error - queue service will operate in degraded mode');
+      });
+    } catch (err) {
+      this.redisConnected = false;
+      logger.warn({ err }, 'Failed to initialize Redis - queue operations will be skipped');
+    }
+  }
+
+  private async safeRedisOperation(operation: string, fn: (redis: Redis) => Promise<any>): Promise<any> {
+    if (!this.redis || !this.redisConnected) {
+      logger.warn({ operation }, 'Redis unavailable - skipping queue operation');
+      return null;
+    }
+
+    try {
+      return await fn(this.redis);
+    } catch (err) {
+      logger.warn({ err, operation }, 'Redis operation failed');
+      return null;
+    }
   }
 
   private createJobId(prefix: string): string {
@@ -72,7 +94,7 @@ class QueueService {
 
   async addVideoProcessingJob(data: { fileId: string; filePath: string; mimeType: string; userId: string }): Promise<string> {
     const jobId = this.createJobId('video');
-    
+
     const job: VideoJobData = {
       id: jobId,
       type: 'VideoProcess',
@@ -85,23 +107,19 @@ class QueueService {
       status: 'Queued',
     };
 
-    await this.redis.lpush(this.videoQueueName, JSON.stringify(job));
-    
-    await this.redis.hset(
-      `omnimind:job:${jobId}`,
-      'data',
-      JSON.stringify(job)
-    );
-    await this.redis.hset(`omnimind:job:${jobId}`, 'status', 'Queued');
+    await this.safeRedisOperation('lpush', async (redis) => {
+      await redis.lpush(this.videoQueueName, JSON.stringify(job));
+      await redis.hset(`omnimind:job:${jobId}`, 'data', JSON.stringify(job));
+      await redis.hset(`omnimind:job:${jobId}`, 'status', 'Queued');
+    });
 
     logger.info({ jobId, fileId: data.fileId }, 'Video processing job added to queue');
-
     return jobId;
   }
 
   async addDocumentProcessingJob(data: { fileId: string; filePath: string; mimeType: string; userId: string }): Promise<string> {
     const jobId = this.createJobId('doc');
-    
+
     const job: DocumentJobData = {
       id: jobId,
       type: 'DocumentProcess',
@@ -114,23 +132,19 @@ class QueueService {
       status: 'Queued',
     };
 
-    await this.redis.lpush(this.documentQueueName, JSON.stringify(job));
-    
-    await this.redis.hset(
-      `omnimind:job:${jobId}`,
-      'data',
-      JSON.stringify(job)
-    );
-    await this.redis.hset(`omnimind:job:${jobId}`, 'status', 'Queued');
+    await this.safeRedisOperation('lpush', async (redis) => {
+      await redis.lpush(this.documentQueueName, JSON.stringify(job));
+      await redis.hset(`omnimind:job:${jobId}`, 'data', JSON.stringify(job));
+      await redis.hset(`omnimind:job:${jobId}`, 'status', 'Queued');
+    });
 
     logger.info({ jobId, fileId: data.fileId }, 'Document processing job added to queue');
-
     return jobId;
   }
 
   async addClipGenerationJob(data: { fileId: string; filePath: string; startTime: number; endTime: number; userId: string }): Promise<string> {
     const jobId = this.createJobId('clip');
-    
+
     const job: ClipJobData = {
       id: jobId,
       type: 'ClipGenerate',
@@ -142,43 +156,59 @@ class QueueService {
       status: 'Queued',
     };
 
-    await this.redis.lpush(this.clipQueueName, JSON.stringify(job));
-    
-    await this.redis.hset(
-      `omnimind:job:${jobId}`,
-      'data',
-      JSON.stringify(job)
-    );
-    await this.redis.hset(`omnimind:job:${jobId}`, 'status', 'Queued');
+    await this.safeRedisOperation('lpush', async (redis) => {
+      await redis.lpush(this.clipQueueName, JSON.stringify(job));
+      await redis.hset(`omnimind:job:${jobId}`, 'data', JSON.stringify(job));
+      await redis.hset(`omnimind:job:${jobId}`, 'status', 'Queued');
+    });
 
     logger.info({ jobId, fileId: data.fileId }, 'Clip generation job added to queue');
-
     return jobId;
   }
 
   async updateJobStatus(jobId: string, status: string): Promise<void> {
-    await this.redis.hset(`omnimind:job:${jobId}`, 'status', status);
+    await this.safeRedisOperation('hset', async (redis) => {
+      await redis.hset(`omnimind:job:${jobId}`, 'status', status);
+    });
     logger.info({ jobId, status }, 'Job status updated');
   }
 
   async getJobStatus(jobId: string): Promise<string | null> {
-    return await this.redis.hget(`omnimind:job:${jobId}`, 'status');
+    const result = await this.safeRedisOperation('hget', async (redis) => {
+      return await redis.hget(`omnimind:job:${jobId}`, 'status');
+    });
+    return result;
   }
 
   async getVideoQueueLength(): Promise<number> {
-    return await this.redis.llen(this.videoQueueName);
+    const result = await this.safeRedisOperation('llen', async (redis) => {
+      return await redis.llen(this.videoQueueName);
+    });
+    return result || 0;
   }
 
   async getDocumentQueueLength(): Promise<number> {
-    return await this.redis.llen(this.documentQueueName);
+    const result = await this.safeRedisOperation('llen', async (redis) => {
+      return await redis.llen(this.documentQueueName);
+    });
+    return result || 0;
   }
 
   async getClipQueueLength(): Promise<number> {
-    return await this.redis.llen(this.clipQueueName);
+    const result = await this.safeRedisOperation('llen', async (redis) => {
+      return await redis.llen(this.clipQueueName);
+    });
+    return result || 0;
   }
 
   async disconnect() {
-    await this.redis.quit();
+    if (this.redis) {
+      await this.redis.quit();
+    }
+  }
+
+  isConnected(): boolean {
+    return this.redisConnected;
   }
 }
 

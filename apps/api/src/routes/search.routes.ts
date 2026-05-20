@@ -37,7 +37,7 @@ router.get(
         return res.json({ results: [], message: 'No indexed files found' });
       }
 
-      const collectionName = `user:${userId}`;
+      const collectionName = `user_${userId}`.replace(/-/g, '_');
       
       let results: any[] = [];
       try {
@@ -95,7 +95,7 @@ router.post(
         return res.json({ results: [], message: 'No indexed files found' });
       }
 
-      const collectionName = `user:${userId}`;
+      const collectionName = `user_${userId}`.replace(/-/g, '_');
       
       let results: any[] = [];
       try {
@@ -153,7 +153,7 @@ router.post(
         return res.status(404).json({ error: 'File not found' });
       }
 
-      const collectionName = `user:${userId}`;
+      const collectionName = `user_${userId}`.replace(/-/g, '_');
       
       const collectionExists = await vectorService.collectionExists(collectionName);
       if (!collectionExists) {

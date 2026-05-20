@@ -22,17 +22,33 @@ export interface VectorCollection {
 class VectorService {
   private baseUrl: string;
   private grpcPort: number;
+  private apiKey: string;
 
   constructor() {
-    this.baseUrl = `http://${config.qdrant.host}:${config.qdrant.port}`;
+    const host = config.qdrant.host.startsWith('http') 
+      ? config.qdrant.host 
+      : `https://${config.qdrant.host}`;
+    this.baseUrl = `${host}:${config.qdrant.port}`;
     this.grpcPort = config.qdrant.grpcPort;
+    this.apiKey = config.qdrant.apiKey;
+  }
+
+  private getHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      ...(this.apiKey ? { 'api-key': this.apiKey } : {}),
+    };
+  }
+
+  private getCollectionName(userId: string): string {
+    return `user_${userId}`.replace(/-/g, '_').replace(/:/g, '_');
   }
 
   async createCollection(name: string, vectorSize: number): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/collections`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders(),
         body: JSON.stringify({
           name,
           vectors: {
@@ -53,6 +69,7 @@ class VectorService {
     try {
       const response = await fetch(`${this.baseUrl}/collections/${name}`, {
         method: 'DELETE',
+        headers: this.getHeaders(),
       });
 
       return response.ok;
@@ -66,7 +83,7 @@ class VectorService {
     try {
       const response = await fetch(`${this.baseUrl}/collections/${collection}/points`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders(),
         body: JSON.stringify({
           points: points.map((p) => ({
             id: p.id,
@@ -87,16 +104,29 @@ class VectorService {
     collection: string,
     vector: number[],
     limit = 10,
+    scoreThreshold = 0.0,
     filter?: Record<string, unknown>
   ): Promise<SearchResult[]> {
     try {
+      const filterBody = filter
+        ? {
+            filter: {
+              must: Object.entries(filter).map(([key, value]) => ({
+                key,
+                match: { value },
+              })),
+            },
+          }
+        : {};
+
       const response = await fetch(`${this.baseUrl}/collections/${collection}/points/search`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders(),
         body: JSON.stringify({
           vector,
           limit,
-          filter,
+          score_threshold: scoreThreshold,
+          ...filterBody,
           with_payload: true,
         }),
       });
@@ -122,7 +152,7 @@ class VectorService {
     try {
       const response = await fetch(`${this.baseUrl}/collections/${collection}/points/delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders(),
         body: JSON.stringify({
           points: ids,
         }),
@@ -171,6 +201,36 @@ class VectorService {
       return response.ok;
     } catch {
       return false;
+    }
+  }
+
+  async updateCollectionMetadata(name: string, metadata: Record<string, unknown>): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/collections/${name}`, {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          metadata,
+        }),
+      });
+
+      return response.ok;
+    } catch (error) {
+      logger.error({ error, name, metadata }, 'Failed to update collection metadata');
+      throw error;
+    }
+  }
+
+  async getCollectionInfo(name: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/collections/${name}`);
+      if (!response.ok) {
+        throw new Error(`Failed to get collection: ${response.statusText}`);
+      }
+      return response.json();
+    } catch (error) {
+      logger.error({ error, name }, 'Failed to get collection info');
+      throw error;
     }
   }
 }

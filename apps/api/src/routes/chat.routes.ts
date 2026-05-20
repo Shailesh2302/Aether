@@ -4,6 +4,7 @@ import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { aiService } from '../services/ai.service.js';
 import { vectorService } from '../services/vector.service.js';
 import { prisma } from '../config/db.js';
+import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 
 const router = Router();
@@ -26,7 +27,7 @@ router.post(
   validateRequest,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { message, sessionId } = req.body;
+      const { message, sessionId, fileId } = req.body;
       const userId = req.user!.userId;
 
       let session = null;
@@ -55,38 +56,82 @@ router.post(
         },
       });
 
-      const userFiles = await prisma.file.findMany({
-        where: { userId, status: 'COMPLETED' },
-        select: { id: true, name: true },
-      });
-
       let context = '';
-      if (userFiles.length > 0) {
-        try {
-          const queryEmbedding = await aiService.createEmbedding(message);
-          
-          const searchResults = await vectorService.searchPoints(
-            `user:${userId}`,
-            queryEmbedding,
-            5
-          );
+      const sources: Array<{text: string; score: number; fileId: string; timestamp?: number}> = [];
 
-          if (searchResults.length > 0) {
-            context = searchResults
-              .map((r) => r.payload.text as string)
-              .join('\n\n');
-          }
-        } catch (error) {
-          logger.warn({ error }, 'Vector search failed, using context-free response');
+      try {
+        const queryEmbedding = await aiService.createEmbedding(message);
+        const collectionName = `user_${userId}`.replace(/-/g, '_');
+        
+        let filterConditions: Record<string, unknown> | undefined;
+        if (fileId) {
+          filterConditions = { file_id: fileId };
         }
+
+        const searchResults = await vectorService.searchPoints(
+          collectionName,
+          queryEmbedding,
+          10,
+          0.0,
+          undefined
+        );
+
+        if (searchResults.length > 0) {
+          context = searchResults
+            .map((r) => r.payload.text as string)
+            .join('\n\n');
+          sources.push(...searchResults.map((r) => ({
+            text: r.payload.text as string,
+            score: r.score,
+            fileId: r.payload.file_id as string,
+            timestamp: (r.payload.metadata as Record<string, unknown>)?.start_sec as number,
+          })));
+        }
+      } catch (error) {
+        logger.warn({ error }, 'Vector search failed, using context-free response');
       }
 
       let assistantMessage: string;
       try {
-        assistantMessage = await aiService.searchDocuments(message, context || undefined);
-      } catch (error) {
-        logger.error({ error }, 'AI service failed');
-        assistantMessage = 'I apologize, but I encountered an error processing your request. Please try again.';
+        const params = new URLSearchParams({
+          user_id: userId,
+          ...(fileId ? { file_id: fileId } : {}),
+        });
+
+        const requestBody: any = {
+          message,
+          collection: `user_${userId}`.replace(/-/g, '_'),
+          top_k: 5,
+        };
+        if (context) {
+          requestBody.system_prompt = `You are a helpful assistant. Use the following context to answer questions:\n\n${context}`;
+        }
+
+        const aiResponse = await fetch(`${config.aiServiceUrl}/api/v1/chat?${params}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (aiResponse.ok) {
+          const data = await aiResponse.json() as any;
+          assistantMessage = data.message || '';
+          sources.push(...(data.sources || []).map((s: any) => ({
+            text: s.text || s.content || '',
+            score: s.score || 0,
+            fileId: s.file_id || fileId || '',
+          })));
+        } else {
+          throw new Error('AI service returned error');
+        }
+      } catch (aiError) {
+        logger.warn({ aiError }, 'AI service failed, falling back to direct NVIDIA API');
+        try {
+          assistantMessage = await aiService.searchDocuments(message, context || undefined);
+        } catch (error) {
+          logger.error({ error }, 'AI service failed');
+          assistantMessage = 'I apologize, but I encountered an error processing your request. Please try again.';
+        }
       }
 
       await prisma.message.create({
@@ -101,7 +146,7 @@ router.post(
       res.json({
         message: assistantMessage,
         sessionId: session.id,
-        sources: [],
+        sources,
       });
     } catch (error) {
       next(error);
@@ -125,29 +170,23 @@ router.post(
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
-      const userFiles = await prisma.file.findMany({
-        where: { userId, status: 'COMPLETED' },
-        select: { id: true, name: true },
-      });
-
       let context = '';
-      if (userFiles.length > 0) {
-        try {
-          const queryEmbedding = await aiService.createEmbedding(message);
-          const searchResults = await vectorService.searchPoints(
-            `user:${userId}`,
-            queryEmbedding,
-            5
-          );
+      try {
+        const queryEmbedding = await aiService.createEmbedding(message);
+        const searchResults = await vectorService.searchPoints(
+          `user:${userId}`,
+          queryEmbedding,
+          10,
+          0.5
+        );
 
-          if (searchResults.length > 0) {
-            context = searchResults
-              .map((r) => r.payload.text as string)
-              .join('\n\n');
-          }
-        } catch (error) {
-          logger.warn({ error }, 'Vector search failed');
+        if (searchResults.length > 0) {
+          context = searchResults
+            .map((r) => r.payload.text as string)
+            .join('\n\n');
         }
+      } catch (error) {
+        logger.warn({ error }, 'Vector search failed');
       }
 
       const messages = context

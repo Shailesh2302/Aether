@@ -26,6 +26,7 @@ impl ProcessingService {
             input_path: input_path.to_string(),
             output_path: None,
             status: "pending".to_string(),
+            parameters: None,
         };
 
         let queue = JobQueue::new(self.app_state.redis.clone());

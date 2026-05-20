@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { cn, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { Play, Pause, Check, X } from "lucide-react";
+import { Play, Check, X, Loader2 } from "lucide-react";
 import type { File } from "@/lib/api";
+import { ClipTimeline } from "@/components/video/ClipTimeline";
+import { toast } from "@/hooks/use-toast";
 
 interface ClipEditorProps {
   file: File;
@@ -19,13 +20,66 @@ export function ClipEditor({ file, onSave, onCancel }: ClipEditorProps) {
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(file.duration || 60);
   const [name, setName] = useState("");
+  const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  const handleSave = () => {
-    if (name.trim() && endTime > startTime) {
+  const duration = file.duration || endTime;
+
+  const handleSave = async () => {
+    if (!name.trim() || endTime <= startTime) return;
+    
+    setIsSaving(true);
+    try {
+      const { clipsApi } = await import("@/lib/api");
+      await clipsApi.generate(file.id, startTime, endTime, name.trim());
+      toast({
+        title: "Clip generated",
+        description: "Your clip is being processed and will be available shortly.",
+      });
+    } catch (error) {
+      console.log("API not available, continuing with local save");
+    } finally {
+      setIsSaving(false);
+    }
+    
+    if (onSave) {
       onSave(startTime, endTime, name.trim());
     }
   };
+
+  const togglePlay = () => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.pause();
+    } else {
+      videoRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleSeek = (time: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(video.currentTime);
+      if (video.currentTime >= endTime) {
+        video.pause();
+        setIsPlaying(false);
+      }
+    };
+
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    return () => video.removeEventListener("timeupdate", handleTimeUpdate);
+  }, [endTime]);
 
   return (
     <div className="space-y-4">
@@ -35,6 +89,34 @@ export function ClipEditor({ file, onSave, onCancel }: ClipEditorProps) {
           <X className="h-4 w-4" />
         </Button>
       </div>
+
+      {file.url && (
+        <div className="relative rounded-lg overflow-hidden bg-black">
+          <video
+            ref={videoRef}
+            src={file.url}
+            className="w-full aspect-video"
+            onClick={togglePlay}
+          />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            {!isPlaying && (
+              <div className="h-12 w-12 rounded-full bg-white/80 flex items-center justify-center">
+                <Play className="h-6 w-6 text-black ml-1" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <ClipTimeline
+        duration={duration}
+        startTime={startTime}
+        endTime={endTime}
+        onStartChange={setStartTime}
+        onEndChange={setEndTime}
+        onSeek={handleSeek}
+        currentTime={currentTime}
+      />
 
       <div className="space-y-2">
         <Label htmlFor="clip-name">Clip Name</Label>
@@ -46,38 +128,7 @@ export function ClipEditor({ file, onSave, onCancel }: ClipEditorProps) {
         />
       </div>
 
-      <div className="space-y-4 p-4 bg-muted rounded-lg">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">Start Time</span>
-          <span className="text-sm text-muted-foreground">
-            {formatDuration(startTime)}
-          </span>
-        </div>
-        <Slider
-          value={[startTime]}
-          onValueChange={([value]) => setStartTime(value)}
-          max={endTime - 1}
-          step={0.1}
-        />
-      </div>
-
-      <div className="space-y-4 p-4 bg-muted rounded-lg">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">End Time</span>
-          <span className="text-sm text-muted-foreground">
-            {formatDuration(endTime)}
-          </span>
-        </div>
-        <Slider
-          value={[endTime]}
-          onValueChange={([value]) => setEndTime(value)}
-          min={startTime + 1}
-          max={file.duration || 300}
-          step={0.1}
-        />
-      </div>
-
-      <div className="text-sm text-muted-foreground text-center">
+      <div className="text-sm text-muted-foreground text-center bg-muted p-2 rounded">
         Duration: {formatDuration(endTime - startTime)}
       </div>
 
@@ -87,11 +138,15 @@ export function ClipEditor({ file, onSave, onCancel }: ClipEditorProps) {
         </Button>
         <Button
           onClick={handleSave}
-          disabled={!name.trim() || endTime <= startTime}
+          disabled={!name.trim() || endTime <= startTime || isSaving}
           className="flex-1"
         >
-          <Check className="h-4 w-4 mr-2" />
-          Save Clip
+          {isSaving ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Check className="h-4 w-4 mr-2" />
+          )}
+          Generate Clip
         </Button>
       </div>
     </div>

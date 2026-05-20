@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useUpload } from "@/hooks/useUpload";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { VideoThumbnail } from "@/components/video/VideoThumbnail";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Upload, Play, Scissors } from "lucide-react";
+import { Upload, Play, Scissors, MessageSquare } from "lucide-react";
 import Link from "next/link";
 
 export default function VideosPage() {
+  const router = useRouter();
   const { uploadedFiles, fetchFiles, deleteFile, isLoading } = useUpload();
   const [selectedVideo, setSelectedVideo] = useState<typeof uploadedFiles[0] | null>(null);
   const [clipVideo, setClipVideo] = useState<typeof uploadedFiles[0] | null>(null);
@@ -25,6 +27,10 @@ export default function VideosPage() {
     if (confirm("Are you sure you want to delete this video?")) {
       await deleteFile(id);
     }
+  };
+
+  const handleVideoChat = (id: string) => {
+    router.push(`/dashboard/videos/${id}`);
   };
 
   return (
@@ -62,13 +68,23 @@ export default function VideosPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {videos.map((video) => (
-            <VideoThumbnail
-              key={video.id}
-              file={video}
-              onPlay={() => setSelectedVideo(video)}
-              onDelete={() => handleDelete(video.id)}
-              onCreateClip={() => setClipVideo(video)}
-            />
+            <div key={video.id} className="relative">
+              <VideoThumbnail
+                file={video}
+                onPlay={() => setSelectedVideo(video)}
+                onDelete={() => handleDelete(video.id)}
+                onCreateClip={() => setClipVideo(video)}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                className="absolute bottom-14 right-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => handleVideoChat(video.id)}
+              >
+                <MessageSquare className="h-3 w-3 mr-1" />
+                Chat
+              </Button>
+            </div>
           ))}
         </div>
       )}

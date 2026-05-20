@@ -5,16 +5,18 @@ use tracing::info;
 pub async fn generate(input: &str, output: &str, start: f64, end: f64) -> anyhow::Result<()> {
     info!("Generating clip from {} to {} ({}s - {}s)", input, output, start, end);
 
+    let duration = end - start;
+
     let mut cmd = Command::new("ffmpeg");
     cmd.args([
         "-y",
         "-ss", &start.to_string(),
         "-i", input,
-        "-t", &(end - start).to_string(),
+        "-t", &duration.to_string(),
         "-c", "copy",
         output,
     ])
-    .stdout(Stdio::null())
+    .stdout(Stdio::piped())
     .stderr(Stdio::piped());
 
     let out = cmd.output().await?;
@@ -24,6 +26,6 @@ pub async fn generate(input: &str, output: &str, start: f64, end: f64) -> anyhow
         anyhow::bail!("FFmpeg clip generation failed: {}", stderr);
     }
 
-    info!("Clip generated successfully");
+    info!("Clip generated successfully: {} ({}s duration)", output, duration);
     Ok(())
 }

@@ -9,7 +9,6 @@ class TranscriptionRequest(BaseModel):
 
 
 class TranscriptionSegment(BaseModel):
-    id: int
     start: float
     end: float
     text: str
@@ -20,3 +19,11 @@ class TranscriptionResponse(BaseModel):
     segments: List[TranscriptionSegment] = []
     language: str
     duration: Optional[float] = None
+
+
+class VideoTranscriptionResponse(BaseModel):
+    text: str
+    segments: List[TranscriptionSegment] = []
+    language: str
+    duration: Optional[float] = None
+    video_processed: bool = True

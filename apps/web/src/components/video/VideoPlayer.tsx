@@ -21,6 +21,7 @@ interface VideoPlayerProps {
   onTimeUpdate?: (time: number) => void;
   initialTime?: number;
   className?: string;
+  onReady?: (player: { currentTime: number; duration: number; seekTo: (time: number) => void }) => void;
 }
 
 export function VideoPlayer({
@@ -29,6 +30,7 @@ export function VideoPlayer({
   onTimeUpdate,
   initialTime = 0,
   className,
+  onReady,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -48,11 +50,22 @@ export function VideoPlayer({
       if (initialTime > 0) {
         video.currentTime = initialTime;
       }
+      if (onReady) {
+        onReady({
+          currentTime: video.currentTime,
+          duration: video.duration,
+          seekTo: (time: number) => {
+            video.currentTime = time;
+          },
+        });
+      }
     };
 
     const handleTimeUpdate = () => {
       setCurrentTime(video.currentTime);
-      onTimeUpdate?.(video.currentTime);
+      if (onTimeUpdate) {
+        onTimeUpdate(video.currentTime);
+      }
     };
 
     const handleProgress = () => {
@@ -70,7 +83,8 @@ export function VideoPlayer({
       video.removeEventListener("timeupdate", handleTimeUpdate);
       video.removeEventListener("progress", handleProgress);
     };
-  }, [initialTime, onTimeUpdate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTime]);
 
   const togglePlay = () => {
     const video = videoRef.current;

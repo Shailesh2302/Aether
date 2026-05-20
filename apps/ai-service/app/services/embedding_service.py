@@ -6,6 +6,8 @@ from app.core.logger import app_logger
 
 settings = get_settings()
 
+MAX_BATCH_SIZE = 50
+
 
 class EmbeddingService:
     def __init__(self):
@@ -46,7 +48,26 @@ class EmbeddingService:
         return await self.embed_text(query)
 
     async def embed_documents(self, documents: List[str]) -> List[List[float]]:
-        return await self.embedTexts(documents)
+        if not documents:
+            return []
+
+        all_embeddings = []
+        for i in range(0, len(documents), MAX_BATCH_SIZE):
+            batch = documents[i : i + MAX_BATCH_SIZE]
+            try:
+                embeddings = await self.embedTexts(batch)
+                all_embeddings.extend(embeddings)
+            except Exception as e:
+                app_logger.warning(f"Batch embedding failed, trying individually: {e}")
+                for doc in batch:
+                    try:
+                        embedding = await self.embed_text(doc)
+                        all_embeddings.append(embedding)
+                    except Exception as inner_e:
+                        app_logger.error(f"Failed to embed document: {inner_e}")
+                        all_embeddings.append([0.0] * 4096)
+
+        return all_embeddings
 
 
 embedding_service = EmbeddingService()

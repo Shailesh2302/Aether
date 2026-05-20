@@ -16,6 +16,7 @@ use crate::config::Config;
 use crate::queue::redis_client::RedisClient;
 use crate::streaming::websocket::WebSocketManager;
 use crate::utils::logger::init_logging;
+use crate::workers::QueueWorker;
 
 pub struct AppState {
     pub config: Config,
@@ -54,8 +55,16 @@ async fn main() -> anyhow::Result<()> {
         })
     };
 
+    let queue_worker = QueueWorker::new(app_state.clone());
+    let _queue_handle = tokio::spawn(async move {
+        if let Err(e) = queue_worker.start().await {
+            error!("Queue worker error: {}", e);
+        }
+    });
+
     info!("OmniMind Rust Worker started successfully");
     info!("WebSocket server running on ws://0.0.0.0:9000");
+    info!("Queue worker processing jobs from Redis");
     info!("Ready to process video jobs from Redis queue");
 
     tokio::select! {

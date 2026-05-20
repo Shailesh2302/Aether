@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useUpload } from "@/hooks/useUpload";
@@ -8,41 +8,95 @@ import { ClipsList } from "@/components/clips/ClipsList";
 import { ClipEditor } from "@/components/clips/ClipEditor";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Upload, Scissors } from "lucide-react";
-import type { Clip, File } from "@/lib/api";
+import { Scissors, Loader2 } from "lucide-react";
+import { clipsApi, type Clip, type File } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 export default function ClipsPage() {
   const { uploadedFiles } = useUpload();
   const [clips, setClips] = useState<Clip[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [playingClip, setPlayingClip] = useState<Clip | null>(null);
 
   const allFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
   const videos = allFiles.filter((f) => f.type?.startsWith("video"));
 
+  const fetchClips = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const data = await clipsApi.list();
+      const fetchedClips = Array.isArray(data) ? data : (data.clips ?? []);
+      setClips(fetchedClips);
+    } catch (error) {
+      console.error("Failed to fetch clips:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load clips. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchClips();
+  }, [fetchClips]);
+
   const handleCreateClip = (file: File) => {
     setSelectedFile(file);
   };
 
-  const handleSaveClip = (startTime: number, endTime: number, name: string) => {
+  const handleClipSaved = async (startTime: number, endTime: number, name: string) => {
     if (!selectedFile) return;
     
-    const newClip: Clip = {
-      id: Date.now().toString(),
-      name,
-      startTime,
-      endTime,
-      fileId: selectedFile.id,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      await clipsApi.create(selectedFile.id, startTime, endTime, name.trim());
+      await fetchClips();
+      
+      toast({
+        title: "Clip created",
+        description: `"${name}" has been saved successfully.`,
+      });
+    } catch (error) {
+      const newClip: Clip = {
+        id: `local-${Date.now()}`,
+        name,
+        startTime,
+        endTime,
+        fileId: selectedFile.id,
+        createdAt: new Date().toISOString(),
+      };
+      setClips([...clips, newClip]);
+      
+      toast({
+        title: "Clip saved locally",
+        description: `"${name}" has been saved (API unavailable).`,
+      });
+    }
     
-    setClips([...clips, newClip]);
     setSelectedFile(null);
   };
 
-  const handleDeleteClip = (clip: Clip) => {
-    if (confirm("Delete this clip?")) {
+  const handleDeleteClip = async (clip: Clip) => {
+    if (!confirm("Delete this clip?")) return;
+    
+    try {
+      if (!clip.id.startsWith("local-")) {
+        await clipsApi.delete(clip.id);
+      }
       setClips(clips.filter((c) => c.id !== clip.id));
+      toast({
+        title: "Clip deleted",
+        description: "The clip has been removed.",
+      });
+    } catch (error) {
+      setClips(clips.filter((c) => c.id !== clip.id));
+      toast({
+        title: "Clip removed",
+        description: "The clip has been removed (local).",
+      });
     }
   };
 
@@ -55,6 +109,10 @@ export default function ClipsPage() {
             Create and manage video clips
           </p>
         </div>
+        <Button variant="outline" onClick={fetchClips} disabled={isLoading}>
+          {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+          Refresh
+        </Button>
       </div>
 
       {videos.length === 0 ? (
@@ -96,25 +154,38 @@ export default function ClipsPage() {
               <CardTitle>Your Clips</CardTitle>
             </CardHeader>
             <CardContent>
-              <ClipsList
-                clips={clips}
-                onPlay={(clip) => setPlayingClip(clip)}
-                onDelete={handleDeleteClip}
-                onDownload={(clip) => console.log("Download", clip)}
-              />
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <ClipsList
+                  clips={clips}
+                  onPlay={(clip) => setPlayingClip(clip)}
+                  onDelete={handleDeleteClip}
+                  onDownload={(clip) => {
+                    toast({
+                      title: "Download",
+                      description: "Download functionality coming soon.",
+                    });
+                  }}
+                />
+              )}
             </CardContent>
           </Card>
         </>
       )}
 
       <Dialog open={!!selectedFile} onOpenChange={() => setSelectedFile(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           {selectedFile && (
-            <ClipEditor
-              file={selectedFile}
-              onSave={handleSaveClip}
-              onCancel={() => setSelectedFile(null)}
-            />
+            <div onClick={(e) => e.stopPropagation()}>
+              <ClipEditor
+                file={selectedFile}
+                onSave={handleClipSaved}
+                onCancel={() => setSelectedFile(null)}
+              />
+            </div>
           )}
         </DialogContent>
       </Dialog>

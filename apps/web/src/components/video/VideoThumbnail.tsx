@@ -1,5 +1,5 @@
 import { cn, formatDuration, formatFileSize } from "@/lib/utils";
-import { Play, MoreVertical, Download, Trash2, Scissors } from "lucide-react";
+import { Play, MoreVertical, Download, Trash2, Scissors, Loader2, CheckCircle, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { File } from "@/lib/api";
 
@@ -10,6 +10,41 @@ interface VideoThumbnailProps {
   onCreateClip?: () => void;
   onDownload?: () => void;
   className?: string;
+}
+
+function StatusBadge({ status }: { status?: string }) {
+  switch (status) {
+    case "pending":
+      return (
+        <div className="absolute top-2 left-2 flex items-center gap-1 bg-yellow-500/90 text-white px-2 py-1 rounded text-xs">
+          <Clock className="h-3 w-3 animate-pulse" />
+          Pending
+        </div>
+      );
+    case "processing":
+      return (
+        <div className="absolute top-2 left-2 flex items-center gap-1 bg-blue-500/90 text-white px-2 py-1 rounded text-xs">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Processing
+        </div>
+      );
+    case "completed":
+      return (
+        <div className="absolute top-2 left-2 flex items-center gap-1 bg-green-500/90 text-white px-2 py-1 rounded text-xs">
+          <CheckCircle className="h-3 w-3" />
+          Ready
+        </div>
+      );
+    case "failed":
+      return (
+        <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-500/90 text-white px-2 py-1 rounded text-xs">
+          <XCircle className="h-3 w-3" />
+          Failed
+        </div>
+      );
+    default:
+      return null;
+  }
 }
 
 export function VideoThumbnail({
@@ -54,6 +89,8 @@ export function VideoThumbnail({
             {formatDuration(file.duration)}
           </div>
         )}
+
+        <StatusBadge status={file.status} />
       </div>
 
       <div className="p-3">

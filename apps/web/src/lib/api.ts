@@ -49,7 +49,8 @@ export interface File {
   thumbnailUrl?: string;
   duration?: number;
   createdAt: string;
-  userId: string;
+  userId?: string;
+  status?: "pending" | "processing" | "completed" | "failed";
 }
 
 export interface ChatMessage {
@@ -77,6 +78,13 @@ export interface Clip {
   createdAt: string;
 }
 
+export interface TranscriptSegment {
+  id: string;
+  startTime: number;
+  endTime: number;
+  text: string;
+}
+
 export const authApi = {
   login: async (email: string, password: string) => {
     const response = await api.post("/auth/login", { email, password });
@@ -99,7 +107,7 @@ export const authApi = {
 export const filesApi = {
   list: async () => {
     const response = await api.get("/files");
-    return response.data.files;
+    return response.data.files ?? response.data;
   },
   upload: async (file: globalThis.File, onProgress?: (progress: number) => void) => {
     const formData = new FormData();
@@ -119,8 +127,9 @@ export const filesApi = {
       name: f.originalName ?? f.name,
       type: f.mimeType,
       size: f.size,
-      url: "",
+      url: f.url ?? "",
       createdAt: f.createdAt,
+      status: f.status ?? "pending",
     };
   },
   delete: async (id: string) => {
@@ -131,17 +140,31 @@ export const filesApi = {
     const response = await api.get(`/files/${id}`);
     return response.data;
   },
-};
-
-export const chatApi = {
-  send: async (message: string, history: ChatMessage[]) => {
-    const response = await api.post("/chat", { message, history });
+  updateStatus: async (id: string, status: string) => {
+    const response = await api.patch(`/files/${id}`, { status });
     return response.data;
   },
-  stream: async (message: string, history: ChatMessage[]) => {
+};
+
+export interface ChatResponse {
+  message: string;
+  sources?: Array<{
+    fileId: string;
+    fileName: string;
+    timestamp?: number;
+    text: string;
+  }>;
+}
+
+export const chatApi = {
+  send: async (message: string, history: ChatMessage[], fileId?: string, transcript?: TranscriptSegment[]): Promise<ChatResponse> => {
+    const response = await api.post("/chat", { message, history, fileId, transcript });
+    return response.data;
+  },
+  stream: async (message: string, history: ChatMessage[], fileId?: string) => {
     const response = await api.post(
       "/chat/stream",
-      { message, history },
+      { message, history, fileId },
       { responseType: "stream" }
     );
     return response.data;
@@ -164,8 +187,77 @@ export const clipsApi = {
     const response = await api.post("/clips", { fileId, startTime, endTime, name });
     return response.data;
   },
+  generate: async (fileId: string, startTime: number, endTime: number, name?: string) => {
+    const response = await api.post("/clips/generate", { fileId, startTime, endTime, name });
+    return response.data;
+  },
   delete: async (id: string) => {
     const response = await api.delete(`/clips/${id}`);
+    return response.data;
+  },
+};
+
+export const indexingApi = {
+  triggerIndex: async (fileId: string) => {
+    const response = await api.post("/index", { fileId });
+    return response.data;
+  },
+};
+
+export interface VideoMoment {
+  start_sec: number;
+  end_sec: number;
+  description: string;
+  importance_score: number;
+}
+
+export interface VideoHighlight {
+  start_sec: number;
+  end_sec: number;
+  title: string;
+  summary: string;
+  category: string;
+  importance_score: number;
+}
+
+export interface VideoTopic {
+  topic: string;
+  timestamp_sec: number;
+  keywords: string[];
+  relevance_score: number;
+}
+
+export interface MomentsResponse {
+  file_id: string;
+  moments: VideoMoment[];
+  total_duration_sec: number;
+  transcript_segments: TranscriptSegment[];
+}
+
+export interface HighlightsResponse {
+  file_id: string;
+  highlights: VideoHighlight[];
+  video_summary: string;
+  topics_covered: string[];
+}
+
+export interface TopicsResponse {
+  file_id: string;
+  topics: VideoTopic[];
+  total_duration_sec: number;
+}
+
+export const videoIntelligenceApi = {
+  getMoments: async (fileId: string, query?: string, topK?: number): Promise<MomentsResponse> => {
+    const response = await api.post("/video/moments", { fileId, query, topK });
+    return response.data;
+  },
+  getHighlights: async (fileId: string, categories?: string[], maxHighlights?: number): Promise<HighlightsResponse> => {
+    const response = await api.post("/video/highlights", { fileId, categories, maxHighlights });
+    return response.data;
+  },
+  getTopics: async (fileId: string): Promise<TopicsResponse> => {
+    const response = await api.get("/video/topics", { params: { fileId } });
     return response.data;
   },
 };

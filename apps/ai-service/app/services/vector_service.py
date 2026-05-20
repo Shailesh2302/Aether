@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict, Any
+import uuid
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, Filter, FieldCondition, MatchValue
 from app.core.config import get_settings
@@ -9,12 +10,14 @@ settings = get_settings()
 
 class VectorService:
     def __init__(self):
+        host = settings.QDRANT_HOST
+        if not host.startswith("http"):
+            host = f"https://{host}"
         self.client = QdrantClient(
-            host=settings.QDRANT_HOST,
-            port=settings.QDRANT_PORT,
+            url=host,
             api_key=settings.QDRANT_API_KEY,
         )
-        app_logger.info(f"Vector service initialized: {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
+        app_logger.info(f"Vector service initialized: {host}")
 
     async def create_collection(
         self,
@@ -53,16 +56,17 @@ class VectorService:
         ids: Optional[List[str]] = None,
     ) -> bool:
         try:
+            points = []
+            for i in range(len(vectors)):
+                point_id = ids[i] if ids else str(uuid.uuid4())
+                points.append({
+                    "id": point_id,
+                    "vector": vectors[i],
+                    "payload": payloads[i],
+                })
             self.client.upsert(
                 collection_name=collection_name,
-                points=[
-                    {
-                        "id": ids[i] if ids else str(i),
-                        "vector": vectors[i],
-                        "payload": payloads[i],
-                    }
-                    for i in range(len(vectors))
-                ],
+                points=points,
             )
             app_logger.info(f"Inserted {len(vectors)} vectors into {collection_name}")
             return True
@@ -91,22 +95,27 @@ class VectorService:
                     ]
                 )
 
-            results = self.client.search(
+            results = self.client.query_points(
                 collection_name=collection_name,
-                query_vector=query_embedding,
+                query=query_embedding,
                 limit=limit,
-                score_threshold=score_threshold,
+                score_threshold=score_threshold if score_threshold > 0 else None,
                 query_filter=search_filter,
                 with_payload=True,
             )
 
+            result_list = list(results)
+            points = []
+            if result_list and len(result_list[0]) >= 2:
+                points = result_list[0][1]
+            
             return [
                 {
-                    "id": result.id,
-                    "score": result.score,
-                    "payload": result.payload,
+                    "id": r.id,
+                    "score": r.score,
+                    "payload": r.payload,
                 }
-                for result in results
+                for r in points
             ]
         except Exception as e:
             app_logger.error(f"Error searching: {e}")

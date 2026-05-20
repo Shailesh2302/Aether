@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { api } from "@/lib/api";
 
 interface User {
   id: string;
@@ -30,22 +31,11 @@ export const useAuthStore = create<AuthState>()(
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await fetch("http://localhost:3001/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
-          });
-
-          const data = await response.json();
-
-          if (!response.ok) {
-            throw new Error(data.error || "Login failed");
-          }
-
+          const { data } = await api.post("/auth/login", { email, password });
           localStorage.setItem("token", data.token);
           set({ user: data.user, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
-          set({ error: error.message || "Login failed", isLoading: false });
+          set({ error: error.response?.data?.error || error.message || "Login failed", isLoading: false });
           throw error;
         }
       },
@@ -53,22 +43,11 @@ export const useAuthStore = create<AuthState>()(
       register: async (email: string, password: string, name: string) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await fetch("http://localhost:3001/api/auth/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password, name }),
-          });
-
-          const data = await response.json();
-
-          if (!response.ok) {
-            throw new Error(data.error || "Registration failed");
-          }
-
+          const { data } = await api.post("/auth/register", { email, password, name });
           localStorage.setItem("token", data.token);
           set({ user: data.user, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
-          set({ error: error.message || "Registration failed", isLoading: false });
+          set({ error: error.response?.data?.error || error.message || "Registration failed", isLoading: false });
           throw error;
         }
       },
@@ -86,18 +65,11 @@ export const useAuthStore = create<AuthState>()(
         }
         set({ isLoading: true });
         try {
-          const response = await fetch("http://localhost:3001/api/auth/me", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (response.ok) {
-            const user = await response.json();
-            set({ user, isAuthenticated: true, isLoading: false });
-          } else {
-            localStorage.removeItem("token");
-            set({ user: null, isAuthenticated: false, isLoading: false });
-          }
+          const { data: user } = await api.get("/auth/me");
+          set({ user, isAuthenticated: true, isLoading: false });
         } catch {
-          set({ isLoading: false });
+          localStorage.removeItem("token");
+          set({ user: null, isAuthenticated: false, isLoading: false });
         }
       },
     }),

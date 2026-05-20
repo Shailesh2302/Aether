@@ -1,6 +1,6 @@
 use std::process::Stdio;
 use tokio::process::Command;
-use tracing::{info};
+use tracing::{info, warn};
 
 pub async fn extract(input: &str, output: &str) -> anyhow::Result<()> {
     info!("Extracting audio from {} to {}", input, output);
@@ -10,23 +10,22 @@ pub async fn extract(input: &str, output: &str) -> anyhow::Result<()> {
         "-y",
         "-i", input,
         "-vn",
-        "-acodec", "libmp3lame",
-        "-ab", "192k",
-        "-ar", "44100",
-        "-ac", "2",
+        "-acodec", "pcm_s16le",
+        "-ar", "16000",
+        "-ac", "1",
         output,
     ])
-    .stdout(Stdio::null())
+    .stdout(Stdio::piped())
     .stderr(Stdio::piped());
 
     let out = cmd.output().await?;
 
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
-        anyhow::bail!("FFmpeg failed: {}", stderr);
+        anyhow::bail!("FFmpeg audio extraction failed: {}", stderr);
     }
 
-    info!("Audio extracted successfully");
+    info!("Audio extracted successfully to {}", output);
     Ok(())
 }
 
@@ -46,9 +45,11 @@ pub async fn extract_with_options(
     args.extend([
         "-vn".to_string(),
         "-acodec".to_string(),
-        "libmp3lame".to_string(),
-        "-ab".to_string(),
-        "192k".to_string(),
+        "pcm_s16le".to_string(),
+        "-ar".to_string(),
+        "16000".to_string(),
+        "-ac".to_string(),
+        "1".to_string(),
     ]);
 
     if let Some(dur) = duration {
@@ -60,13 +61,14 @@ pub async fn extract_with_options(
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&args)
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
     let out = cmd.output().await?;
 
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
+        warn!("FFmpeg audio extraction with options failed: {}", stderr);
         anyhow::bail!("FFmpeg failed: {}", stderr);
     }
 

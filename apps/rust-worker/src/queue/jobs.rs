@@ -4,6 +4,24 @@ use tracing::info;
 use crate::queue::redis_client::RedisClient;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct JobParameters {
+    #[serde(default)]
+    pub start_time: Option<f64>,
+    #[serde(default)]
+    pub end_time: Option<f64>,
+    #[serde(default)]
+    pub duration: Option<f64>,
+    #[serde(default)]
+    pub clip_id: Option<String>,
+    #[serde(default)]
+    pub thumbnail_time: Option<f64>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct QueueJob {
     pub id: String,
     pub job_type: String,
@@ -11,6 +29,8 @@ pub struct QueueJob {
     pub input_path: String,
     pub output_path: Option<String>,
     pub status: String,
+    #[serde(default)]
+    pub parameters: Option<JobParameters>,
 }
 
 pub struct JobQueue {

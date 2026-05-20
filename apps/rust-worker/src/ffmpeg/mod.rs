@@ -5,8 +5,17 @@ pub mod thumbnails;
 
 use std::process::Stdio;
 use tokio::process::Command;
-use tokio::io::AsyncReadExt;
 use tracing::{info, debug};
+
+#[derive(Debug, Clone)]
+pub struct VideoMetadata {
+    pub duration_sec: f64,
+    pub width: u32,
+    pub height: u32,
+    pub codec: String,
+    pub bitrate: Option<u64>,
+    pub fps: Option<f64>,
+}
 
 pub struct Ffmpeg {
     path: Option<String>,
@@ -17,7 +26,7 @@ impl Ffmpeg {
         Self { path }
     }
 
-    pub fn command(&self) -> Command {
+    fn command(&self) -> Command {
         let mut cmd = Command::new(self.path.as_deref().unwrap_or("ffmpeg"));
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
@@ -40,6 +49,22 @@ impl Ffmpeg {
 
     pub fn get_path(&self) -> &str {
         self.path.as_deref().unwrap_or("ffmpeg")
+    }
+
+    pub async fn extract_audio(&self, input_path: &str, output_path: &str) -> anyhow::Result<()> {
+        extract_audio::extract(input_path, output_path).await
+    }
+
+    pub async fn generate_clip(&self, input_path: &str, output_path: &str, start_sec: f64, end_sec: f64) -> anyhow::Result<()> {
+        generate_clip::generate(input_path, output_path, start_sec, end_sec).await
+    }
+
+    pub async fn generate_thumbnail(&self, input_path: &str, output_path: &str, timestamp_sec: f64) -> anyhow::Result<()> {
+        thumbnails::generate(input_path, output_path, timestamp_sec).await
+    }
+
+    pub async fn get_metadata(&self, path: &str) -> anyhow::Result<VideoMetadata> {
+        get_metadata::get_metadata(path).await
     }
 }
 

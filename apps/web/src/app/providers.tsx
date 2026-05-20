@@ -1,9 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const isLoading = useAuthStore((state) => state.isLoading);
+  const { isLoading, checkAuth } = useAuthStore();
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   if (isLoading) {
     return (

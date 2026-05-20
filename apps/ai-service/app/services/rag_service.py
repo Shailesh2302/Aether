@@ -1,42 +1,107 @@
 from typing import List, Optional, Dict, Any
+from dataclasses import dataclass
+
 from app.services.embedding_service import embedding_service
 from app.services.vector_service import vector_service
 from app.core.logger import app_logger
+from app.core.config import get_settings
+
+settings = get_settings()
+
+
+@dataclass
+class Source:
+    text: str
+    score: float
+    file_id: Optional[str] = None
+    chunk_id: Optional[str] = None
+    metadata: Dict[str, Any] = None
+
+
+@dataclass
+class RAGContext:
+    context: str
+    sources: List[Source]
 
 
 class RAGService:
     def __init__(self):
+        self.max_context_chunks = 10
         app_logger.info("RAG Service initialized")
 
     async def get_relevant_context(
         self,
         query: str,
-        collection: str = "default",
+        user_id: str,
+        collection: Optional[str] = None,
+        file_id: Optional[str] = None,
         limit: int = 5,
-    ) -> str:
+    ) -> RAGContext:
+        collection = collection or f"user_{user_id}".replace("-", "_")
+
+        app_logger.info(
+            f"Getting context: query={query[:50]}..., collection={collection}, file_id={file_id}"
+        )
+
         try:
             query_embedding = await embedding_service.embed_query(query)
-            
+
             results = await vector_service.search(
                 collection_name=collection,
                 query_embedding=query_embedding,
                 limit=limit,
                 score_threshold=0.3,
+                filter_conditions=None,
             )
 
             if not results:
-                return ""
+                app_logger.info("No relevant context found")
+                return RAGContext(context="", sources=[])
 
+            sources = []
             context_parts = []
+
             for result in results:
-                text = result.get("payload", {}).get("text", "")
+                payload = result.get("payload", {})
+                text = payload.get("text", "")
+
                 if text:
                     context_parts.append(text)
+                    sources.append(
+                        Source(
+                            text=text,
+                            score=result.get("score", 0.0),
+                            file_id=payload.get("file_id"),
+                            chunk_id=payload.get("chunk_index"),
+                            metadata=payload.get("metadata", {}),
+                        )
+                    )
 
-            return "\n\n".join(context_parts)
+            context = "\n\n".join(context_parts)
+
+            app_logger.info(f"Retrieved {len(sources)} source chunks")
+            return RAGContext(context=context, sources=sources)
+
         except Exception as e:
             app_logger.error(f"Error getting relevant context: {e}")
-            return ""
+            return RAGContext(context="", sources=[])
+
+    async def search_with_sources(
+        self,
+        query: str,
+        user_id: str,
+        collection: Optional[str] = None,
+        file_id: Optional[str] = None,
+        limit: int = 10,
+    ) -> List[Source]:
+        rag_context = await self.get_relevant_context(
+            query=query,
+            user_id=user_id,
+            collection=collection,
+            file_id=file_id,
+            limit=limit,
+        )
+        return rag_context.sources
 
     async def index_document(
         self,
@@ -48,10 +113,10 @@ class RAGService:
         try:
             exists = await vector_service.collection_exists(collection)
             if not exists:
-                await vector_service.create_collection(collection, 1536)
+                await vector_service.create_collection(collection, 4096)
 
-            chunks = self._chunk_text(text, chunk_size=1000, overlap=200)
-            
+            chunks = self._chunk_text(text, chunk_size=settings.CHUNK_SIZE, overlap=settings.CHUNK_OVERLAP)
+
             embeddings = await embedding_service.embed_documents(chunks)
 
             payloads = [
@@ -79,7 +144,7 @@ class RAGService:
         try:
             results = await vector_service.search(
                 collection_name=collection,
-                query_embedding=[0] * 1536,
+                query_embedding=[0] * 4096,
                 limit=1000,
             )
 
@@ -92,17 +157,48 @@ class RAGService:
             if ids_to_delete:
                 await vector_service.delete_points(collection, ids_to_delete)
 
+            app_logger.info(f"Deleted {len(ids_to_delete)} chunks for document {document_id}")
             return True
         except Exception as e:
             app_logger.error(f"Error deleting document: {e}")
             return False
 
+    async def delete_file(self, user_id: str, file_id: str) -> bool:
+        collection = f"user_{user_id}"
+        app_logger.info(f"Deleting all chunks for file: {file_id} in collection: {collection}")
+
+        try:
+            query_embedding = await embedding_service.embed_query("placeholder query to get all")
+            results = await vector_service.search(
+                collection_name=collection,
+                query_embedding=query_embedding,
+                limit=1000,
+            )
+
+            ids_to_delete = [
+                result["id"]
+                for result in results
+                if result.get("payload", {}).get("file_id") == file_id
+            ]
+
+            if ids_to_delete:
+                await vector_service.delete_points(collection, ids_to_delete)
+
+            app_logger.info(f"Deleted {len(ids_to_delete)} chunks for file {file_id}")
+            return True
+        except Exception as e:
+            app_logger.error(f"Error deleting file: {e}")
+            return False
+
     def _chunk_text(
         self,
         text: str,
-        chunk_size: int = 1000,
-        overlap: int = 200,
+        chunk_size: int = None,
+        overlap: int = None,
     ) -> List[str]:
+        chunk_size = chunk_size or settings.CHUNK_SIZE
+        overlap = overlap or settings.CHUNK_OVERLAP
+
         chunks = []
         start = 0
         text_length = len(text)

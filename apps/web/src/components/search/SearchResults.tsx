@@ -1,4 +1,5 @@
-import { Search, FileText, Video, Play } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, FileText, Video, Play, ExternalLink, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SearchResult } from "@/lib/api";
 import { formatDuration } from "@/lib/utils";
@@ -10,6 +11,8 @@ interface SearchResultsProps {
 }
 
 export function SearchResults({ results, isLoading, onResultClick }: SearchResultsProps) {
+  const router = useRouter();
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -35,16 +38,24 @@ export function SearchResults({ results, isLoading, onResultClick }: SearchResul
     );
   }
 
+  const handleResultClick = (result: SearchResult) => {
+    if (onResultClick) {
+      onResultClick(result);
+    } else if (result.timestamp !== undefined && result.fileId) {
+      router.push(`/dashboard/videos/${result.fileId}?t=${result.timestamp}`);
+    }
+  };
+
   return (
     <div className="space-y-3">
       {results.map((result) => (
         <div
           key={result.id}
-          className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
-          onClick={() => onResultClick?.(result)}
+          className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer group"
+          onClick={() => handleResultClick(result)}
         >
           <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-            {result.fileName?.match(/\.(mp4|webm|mov)$/i) ? (
+            {result.fileName?.match(/\.(mp4|webm|mov|avi)$/i) ? (
               <Video className="h-5 w-5 text-muted-foreground" />
             ) : (
               <FileText className="h-5 w-5 text-muted-foreground" />
@@ -52,20 +63,33 @@ export function SearchResults({ results, isLoading, onResultClick }: SearchResul
           </div>
 
           <div className="flex-1 min-w-0">
-            <h4 className="font-medium truncate">{result.fileName}</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-medium truncate">{result.fileName}</h4>
+              {result.fileId && (
+                <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              )}
+            </div>
+            
             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-              {result.snippet}
+              <span className="text-foreground/80">{result.snippet}</span>
             </p>
-            <div className="flex items-center gap-3 mt-2">
+            
+            <div className="flex items-center gap-3 mt-2 flex-wrap">
               {result.timestamp !== undefined && (
-                <Button variant="ghost" size="sm" className="h-6 text-xs">
-                  <Play className="h-3 w-3 mr-1" />
+                <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
+                  <Clock className="h-3 w-3 mr-1" />
                   {formatDuration(result.timestamp)}
                 </Button>
               )}
-              <span className="text-xs text-muted-foreground">
-                Relevance: {Math.round(result.score * 100)}%
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <span className="text-primary font-medium">{Math.round(result.score * 100)}%</span>
+                relevance
               </span>
+              {result.fileId && (
+                <span className="text-xs text-muted-foreground">
+                  ID: {result.fileId.slice(0, 8)}...
+                </span>
+              )}
             </div>
           </div>
         </div>

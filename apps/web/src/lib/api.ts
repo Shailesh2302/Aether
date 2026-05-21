@@ -107,7 +107,12 @@ export const authApi = {
 export const filesApi = {
   list: async () => {
     const response = await api.get("/files");
-    return response.data.files ?? response.data;
+    const files = response.data.files ?? response.data;
+    // Map mimeType to type for consistency
+    return Array.isArray(files) ? files.map((f: any) => ({
+      ...f,
+      type: f.mimeType,
+    })) : files;
   },
   upload: async (file: globalThis.File, onProgress?: (progress: number) => void) => {
     const formData = new FormData();

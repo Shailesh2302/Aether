@@ -20,7 +20,11 @@ import {
   MessageSquare, 
   Scissors,
   FileText,
-  Settings
+  Settings,
+  Brain,
+  Clock,
+  Zap,
+  Lightbulb
 } from "lucide-react";
 
 type SidebarTab = "ai" | "summary" | "ask" | "clips";
@@ -142,6 +146,53 @@ export default function VideoDetailPage() {
           <p className="text-sm text-muted-foreground">
             {file.duration ? `${Math.floor(file.duration / 60)}:${String(Math.floor(file.duration % 60)).padStart(2, '0')}` : '--:--'}
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => router.push(`/dashboard/videos/${fileId}/moments`)}
+            className="gap-1"
+          >
+            <Clock className="h-4 w-4" />
+            Moments
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => router.push(`/dashboard/videos/${fileId}/highlights`)}
+            className="gap-1"
+          >
+            <Zap className="h-4 w-4" />
+            Highlights
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => router.push(`/dashboard/videos/${fileId}/topics`)}
+            className="gap-1"
+          >
+            <Lightbulb className="h-4 w-4" />
+            Topics
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => router.push(`/dashboard/videos/${fileId}/summary`)}
+            className="gap-1"
+          >
+            <FileText className="h-4 w-4" />
+            Summary
+          </Button>
+          <Button 
+            variant="default" 
+            size="sm"
+            onClick={() => router.push(`/dashboard/videos/${fileId}/intelligence`)}
+            className="gap-1"
+          >
+            <Brain className="h-4 w-4" />
+            All AI Features
+          </Button>
         </div>
         <Button variant="ghost" size="icon">
           <Settings className="h-5 w-5" />

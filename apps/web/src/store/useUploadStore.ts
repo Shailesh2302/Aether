@@ -120,10 +120,18 @@ export const useUploadStore = create<UploadState>()(
       fetchFiles: async () => {
         set({ isLoading: true, error: null });
         try {
+          const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+          if (!token) {
+            console.log("No token found in localStorage");
+            set({ isLoading: false });
+            return;
+          }
           const files = await filesApi.list();
+          console.log("Fetched files:", files);
           set({ uploadedFiles: files, isLoading: false });
-        } catch {
-          set({ isLoading: false });
+        } catch (error: any) {
+          console.error("Failed to fetch files:", error);
+          set({ isLoading: false, error: error.message });
         }
       },
 

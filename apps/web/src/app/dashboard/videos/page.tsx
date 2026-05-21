@@ -13,13 +13,14 @@ import Link from "next/link";
 
 export default function VideosPage() {
   const router = useRouter();
-  const { uploadedFiles, fetchFiles, deleteFile, isLoading } = useUpload();
+  const { uploadedFiles, fetchFiles, deleteFile, isLoading, error } = useUpload();
   const [selectedVideo, setSelectedVideo] = useState<typeof uploadedFiles[0] | null>(null);
   const [clipVideo, setClipVideo] = useState<typeof uploadedFiles[0] | null>(null);
 
   useEffect(() => {
+    console.log("Videos page mounted, fetching files...");
     fetchFiles();
-  }, [fetchFiles]);
+  }, []);
 
   const videos = (Array.isArray(uploadedFiles) ? uploadedFiles : []).filter((f) => f.type?.startsWith("video"));
 
@@ -52,6 +53,11 @@ export default function VideosPage() {
 
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">Loading videos...</div>
+      ) : error ? (
+        <div className="text-center py-12">
+          <div className="text-red-500 mb-4">Error: {error}</div>
+          <Button onClick={() => fetchFiles()}>Retry</Button>
+        </div>
       ) : videos.length === 0 ? (
         <div className="text-center py-12">
           <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">

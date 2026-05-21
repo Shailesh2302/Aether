@@ -59,17 +59,26 @@ export const useAuthStore = create<AuthState>()(
 
       checkAuth: async () => {
         const token = localStorage.getItem("token");
+        
+        // If no token, not authenticated
         if (!token) {
-          set({ isLoading: false });
+          set({ isLoading: false, isAuthenticated: false });
           return;
         }
-        set({ isLoading: true });
+        
+        // Token exists - user is authenticated
+        // Try to get user data, but don't logout if it fails
+        set({ isLoading: true, isAuthenticated: true });
+        
         try {
           const { data: user } = await api.get("/auth/me");
           set({ user, isAuthenticated: true, isLoading: false });
-        } catch {
-          localStorage.removeItem("token");
-          set({ user: null, isAuthenticated: false, isLoading: false });
+        } catch (error) {
+          // Token might be expired but we'll keep user logged in
+          // The API interceptor will handle token refresh or logout when needed
+          console.log("Auth check failed but keeping user logged in:", error);
+          // Keep isAuthenticated: true, just don't set user
+          set({ isLoading: false });
         }
       },
     }),

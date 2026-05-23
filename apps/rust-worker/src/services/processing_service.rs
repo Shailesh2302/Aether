@@ -3,6 +3,7 @@ use tracing::info;
 use crate::types::ProcessingStatus;
 use crate::queue::jobs::QueueJob;
 use crate::queue::jobs::JobQueue;
+use crate::queue::jobs::JobParameters;
 use crate::AppState;
 
 pub struct ProcessingService {
@@ -39,11 +40,32 @@ impl ProcessingService {
     pub async fn queue_clip_generation(
         &self,
         video_id: &str,
-        _clip_id: &str,
-        _start_time: f64,
-        _duration: f64,
+        clip_id: &str,
+        start_time: f64,
+        duration: f64,
     ) -> anyhow::Result<String> {
-        info!("Queued clip generation: {}", video_id);
-        Ok(video_id.to_string())
+        let job = QueueJob {
+            id: format!("clip-{}", clip_id),
+            job_type: "ClipGenerate".to_string(),
+            video_id: video_id.to_string(),
+            input_path: String::new(),
+            output_path: Some(format!("/tmp/omnimind/clips/{}.mp4", clip_id)),
+            status: "pending".to_string(),
+            parameters: Some(JobParameters {
+                start_time: Some(start_time),
+                end_time: Some(start_time + duration),
+                duration: Some(duration),
+                clip_id: Some(clip_id.to_string()),
+                thumbnail_time: None,
+                quality: Some("medium".to_string()),
+                format: Some("mp4".to_string()),
+            }),
+        };
+
+        let queue = JobQueue::with_queue(self.app_state.redis.clone(), "omnimind:clip:queue");
+        queue.push(job).await?;
+
+        info!("Queued clip generation: {} for video: {}", clip_id, video_id);
+        Ok(clip_id.to_string())
     }
 }

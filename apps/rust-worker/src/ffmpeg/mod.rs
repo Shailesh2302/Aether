@@ -5,7 +5,7 @@ pub mod thumbnails;
 
 use std::process::Stdio;
 use tokio::process::Command;
-use tracing::{info, debug};
+use tracing::info;
 
 #[derive(Debug, Clone)]
 pub struct VideoMetadata {
@@ -68,6 +68,7 @@ impl Ffmpeg {
     }
 }
 
-pub async fn get_metadata(path: &str) -> anyhow::Result<String> {
+#[allow(dead_code)]
+pub async fn get_metadata(_path: &str) -> anyhow::Result<String> {
     Ok("metadata".to_string())
 }

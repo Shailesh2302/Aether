@@ -71,7 +71,7 @@ app.get('/api/health/detailed', async (req, res) => {
   health.redis.status = queueService.isConnected() ? 'ok' : 'disconnected';
 
   try {
-    const aiResponse = await fetch(`${config.aiServiceUrl}/health`, {
+      const aiResponse = await fetch(`${config.aiServiceUrl}/api/v1/health`, {
       method: 'GET',
       signal: AbortSignal.timeout(3000),
     });

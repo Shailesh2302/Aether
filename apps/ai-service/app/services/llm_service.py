@@ -10,12 +10,20 @@ settings = get_settings()
 
 class LLMService:
     def __init__(self):
-        self.client = AsyncOpenAI(
-            base_url=settings.NVIDIA_BASE_URL,
-            api_key=settings.NVIDIA_API_KEY,
-        )
+        self._client: Optional[AsyncOpenAI] = None
         self.model = settings.NVIDIA_CHAT_MODEL
         app_logger.info(f"LLM Service initialized with model: {self.model}")
+
+    @property
+    def client(self) -> AsyncOpenAI:
+        if self._client is None:
+            if not settings.NVIDIA_API_KEY:
+                app_logger.warning("NVIDIA_API_KEY not set - LLM calls will fail at runtime")
+            self._client = AsyncOpenAI(
+                base_url=settings.NVIDIA_BASE_URL,
+                api_key=settings.NVIDIA_API_KEY,
+            )
+        return self._client
 
     async def generate_response(
         self,

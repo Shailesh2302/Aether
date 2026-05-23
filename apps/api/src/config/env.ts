@@ -24,16 +24,16 @@ export const config = {
   },
 
   qdrant: {
-    host: process.env.QDRANT_HOST || '2e308c4b-9092-44ce-b8fd-206f1fc3294e.sa-east-1-0.aws.cloud.qdrant.io',
+    host: process.env.QDRANT_HOST || 'localhost',
     port: parseInt(process.env.QDRANT_PORT || '6333', 10),
     grpcPort: parseInt(process.env.QDRANT_GRPC_PORT || '6334', 10),
-    apiKey: process.env.QDRANT_API_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwic3ViamVjdCI6ImFwaS1rZXk6M2ZkYzE1YzYtNGYwMC00ODRhLWIxNGEtMDhkMGZiOWQxN2UwIn0.lwb1EbZvxlS2rkZcTj0W5bYpW7YC7-5bMZUghjVsjj0',
+    apiKey: process.env.QDRANT_API_KEY || '',
   },
 
   aiServiceUrl: process.env.AI_SERVICE_URL || 'http://localhost:3002',
 
   ai: {
-    apiKey: process.env.NVIDIA_API_KEY || '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',
+    apiKey: process.env.NVIDIA_API_KEY || '',
   },
 
   jwt: {

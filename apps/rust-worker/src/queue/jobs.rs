@@ -40,9 +40,13 @@ pub struct JobQueue {
 
 impl JobQueue {
     pub fn new(redis: Arc<RedisClient>) -> Self {
+        Self::with_queue(redis, "omnimind:video:queue")
+    }
+
+    pub fn with_queue(redis: Arc<RedisClient>, queue_key: &str) -> Self {
         Self {
             redis,
-            queue_key: "omnimind:video:queue".to_string(),
+            queue_key: queue_key.to_string(),
         }
     }
 
@@ -54,7 +58,7 @@ impl JobQueue {
     }
 
     pub async fn pop(&self) -> anyhow::Result<Option<QueueJob>> {
-        match self.redis.brpop(&self.queue_key, 5).await? {
+        match self.redis.brpop(&self.queue_key, 5.0).await? {
             Some(data) => {
                 let job: QueueJob = serde_json::from_str(&data)?;
                 Ok(Some(job))

@@ -15,7 +15,7 @@ services:
       QDRANT__SERVICE__GRPC_PORT: 6334
       QDRANT__SERVICE__HTTP_PORT: 6333
       QDRANT__LOG__LEVEL: INFO
-      QDRANT__SERVICE__API_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwic3ViamVjdCI6ImFwaS1rZXk6M2ZkYzE1YzYtNGYwMC00ODRhLWIxNGEtMDhkMGZiOWQxN2UwIn0.lwb1EbZvxlS2rkZcTj0W5bYpW7YC7-5bMZUghjVsjj0
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-omnimind-dev-key}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
       interval: 10s
@@ -36,11 +36,11 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3001
-      - POSTGRES_URL=postgresql://neondb_owner:npg_DaE1A8lfsyvM@ep-snowy-mountain-ah8iqbk4-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-      - REDIS_URL=rediss://default:XrxS1W4ZBoqd46elrCdzsb2hXdDuW2mW@redis-12625.c323.us-east-1-2.ec2.cloud.redislabs.com:12625
-      - REDIS_HOST=redis-12625.c323.us-east-1-2.ec2.cloud.redislabs.com
-      - REDIS_PORT=12625
-      - REDIS_PASSWORD=XrxS1W4ZBoqd46elrCdzsb2hXdDuW2mW
+      - POSTGRES_URL=${POSTGRES_URL}
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - AI_SERVICE_URL=http://ai-service:3002
@@ -69,10 +69,10 @@ services:
       - PORT=3002
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - NVIDIA_API_KEY=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
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-gpt-4}
-      - LLM_TEMPERATURE=0.7
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
     depends_on:
       qdrant:
         condition: service_healthy
@@ -92,9 +92,9 @@ services:
     restart: unless-stopped
     environment:
       - RUST_LOG=info
-      - REDIS_URL=rediss://default:XrxS1W4ZBoqd46elrCdzsb2hXdDuW2mW@redis-12625.c323.us-east-1-2.ec2.cloud.redislabs.com:12625
-      - REDIS_HOST=redis-12625.c323.us-east-1-2.ec2.cloud.redislabs.com
-      - REDIS_PORT=12625
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
     volumes:
       - ./apps/rust-worker:/app
       - video_uploads:/tmp/omnimind
@@ -145,7 +145,7 @@ services:
     container_name: omnimind-grafana
     restart: unless-stopped
     ports:
-      - "3002:3000"
+      - "3004:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin

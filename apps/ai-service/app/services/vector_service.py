@@ -141,4 +141,42 @@ class VectorService:
             return False
 
 
+    async def get_collection_points(
+        self,
+        collection_name: str,
+        file_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        try:
+            from qdrant_client.models import Filter as QdrantFilter, FieldCondition, MatchValue
+
+            filter_cond = None
+            if file_id:
+                filter_cond = QdrantFilter(
+                    must=[FieldCondition(key="file_id", match=MatchValue(value=file_id))]
+                )
+
+            results = self.client.scroll(
+                collection_name=collection_name,
+                limit=limit,
+                scroll_filter=filter_cond,
+                with_payload=True,
+            )
+
+            points = []
+            if results and len(results) > 0:
+                points = results[0] if isinstance(results[0], list) else []
+
+            return [
+                {
+                    "id": str(r.id),
+                    "payload": r.payload,
+                }
+                for r in points
+            ]
+        except Exception as e:
+            app_logger.error(f"Error getting collection points: {e}")
+            return []
+
+
 vector_service = VectorService()

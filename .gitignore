@@ -62,4 +62,4 @@ storage/temp/*
 !storage/.gitkeep
 
 # Rust
-rust-analyzer/
+rust-analyzer/apps/api/storage/uploads/

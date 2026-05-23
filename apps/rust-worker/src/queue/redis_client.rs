@@ -1,52 +1,70 @@
 use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use std::sync::Mutex;
+use redis::aio::ConnectionManager;
+use redis::AsyncCommands;
+use tokio::sync::Mutex;
 use tracing::info;
 
 pub struct RedisClient {
-    storage: Arc<Mutex<HashMap<String, String>>>,
+    conn: Arc<Mutex<ConnectionManager>>,
 }
 
 impl RedisClient {
-    pub async fn new(_url: &str) -> anyhow::Result<Self> {
-        info!("Redis client initialized (mock mode)");
+    pub async fn new(url: &str) -> anyhow::Result<Self> {
+        let client = redis::Client::open(url)?;
+        let conn = ConnectionManager::new(client).await?;
+        info!("Redis client connected to {}", url);
         Ok(Self {
-            storage: Arc::new(Mutex::new(HashMap::new())),
+            conn: Arc::new(Mutex::new(conn)),
         })
     }
 
-    pub async fn lpush<T: std::fmt::Debug>(&self, key: &str, value: T) -> anyhow::Result<()> {
-        info!("Queue push: {} -> {:?}", key, value);
+    pub async fn lpush(&self, key: &str, value: &str) -> anyhow::Result<()> {
+        let mut conn = self.conn.lock().await;
+        conn.lpush::<&str, &str, ()>(key, value).await?;
         Ok(())
     }
 
-    pub async fn rpush<T: std::fmt::Debug>(&self, _key: &str, _value: T) -> anyhow::Result<()> {
+    pub async fn rpush(&self, key: &str, value: &str) -> anyhow::Result<()> {
+        let mut conn = self.conn.lock().await;
+        conn.rpush::<&str, &str, ()>(key, value).await?;
         Ok(())
     }
 
-    pub async fn brpop(&self, _key: &str, timeout: u64) -> anyhow::Result<Option<String>> {
-        tokio::time::sleep(tokio::time::Duration::from_secs(timeout)).await;
-        Ok(None)
+    pub async fn brpop(&self, key: &str, timeout: f64) -> anyhow::Result<Option<String>> {
+        let mut conn = self.conn.lock().await;
+        let result: Option<(String, String)> = conn
+            .brpop(key, timeout)
+            .await?;
+        Ok(result.map(|(_key, value)| value))
     }
 
     pub async fn set(&self, key: &str, value: &str) -> anyhow::Result<()> {
-        self.storage.lock().unwrap().insert(key.to_string(), value.to_string());
+        let mut conn = self.conn.lock().await;
+        conn.set::<&str, &str, ()>(key, value).await?;
         Ok(())
     }
 
     pub async fn get(&self, key: &str) -> anyhow::Result<Option<String>> {
-        Ok(self.storage.lock().unwrap().get(key).cloned())
+        let mut conn = self.conn.lock().await;
+        let result: Option<String> = conn.get(key).await?;
+        Ok(result)
     }
 
     pub async fn hset(&self, key: &str, field: &str, value: &str) -> anyhow::Result<()> {
-        let full_key = format!("{}:{}", key, field);
-        self.storage.lock().unwrap().insert(full_key, value.to_string());
+        let mut conn = self.conn.lock().await;
+        conn.hset::<&str, &str, &str, ()>(key, field, value).await?;
         Ok(())
     }
 
     pub async fn hget(&self, key: &str, field: &str) -> anyhow::Result<Option<String>> {
-        let full_key = format!("{}:{}", key, field);
-        Ok(self.storage.lock().unwrap().get(&full_key).cloned())
+        let mut conn = self.conn.lock().await;
+        let result: Option<String> = conn.hget(key, field).await?;
+        Ok(result)
+    }
+
+    pub async fn llen(&self, key: &str) -> anyhow::Result<usize> {
+        let mut conn = self.conn.lock().await;
+        let result: usize = conn.llen(key).await?;
+        Ok(result)
     }
 }

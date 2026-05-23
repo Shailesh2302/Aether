@@ -522,7 +522,7 @@ async def get_video_status(
             progress = 0.7
             status = "indexed"
             
-            points = await vector_service.get_collection_points(collection, request.file_id if 'request' in locals() else None)
+            points = await vector_service.get_collection_points(collection, file_id)
             if points:
                 transcript_ready = True
                 progress = 0.9

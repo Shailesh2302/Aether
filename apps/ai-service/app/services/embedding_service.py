@@ -1,5 +1,5 @@
 import os
-from typing import List, Union
+from typing import List, Union, Optional
 from openai import AsyncOpenAI
 from app.core.config import get_settings
 from app.core.logger import app_logger
@@ -11,12 +11,20 @@ MAX_BATCH_SIZE = 50
 
 class EmbeddingService:
     def __init__(self):
-        self.client = AsyncOpenAI(
-            base_url=settings.NVIDIA_BASE_URL,
-            api_key=settings.NVIDIA_API_KEY,
-        )
+        self._client: Optional[AsyncOpenAI] = None
         self.model = settings.NVIDIA_EMBEDDING_MODEL
         app_logger.info(f"Embedding Service initialized with model: {self.model}")
+
+    @property
+    def client(self) -> AsyncOpenAI:
+        if self._client is None:
+            if not settings.NVIDIA_API_KEY:
+                app_logger.warning("NVIDIA_API_KEY not set - embeddings will fail at runtime")
+            self._client = AsyncOpenAI(
+                base_url=settings.NVIDIA_BASE_URL,
+                api_key=settings.NVIDIA_API_KEY,
+            )
+        return self._client
 
     @property
     def model_name(self) -> str:

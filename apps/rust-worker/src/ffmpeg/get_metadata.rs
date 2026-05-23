@@ -1,6 +1,6 @@
 use std::process::Stdio;
 use tokio::process::Command;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tracing::info;
 
 use crate::ffmpeg::VideoMetadata;

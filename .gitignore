@@ -63,3 +63,4 @@ storage/temp/*
 
 # Rust
 rust-analyzer/apps/api/storage/uploads/
+apps/api/storage/uploads/

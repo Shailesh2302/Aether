@@ -1,7 +1,7 @@
 [project]
-name = "omnimind-ai-service"
+name = "aether-ai-service"
 version = "1.0.0"
-description = "OmniMind AI Service for RAG, embeddings, and LLM inference"
+description = "Aether AI Service for RAG, embeddings, and LLM inference"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.109.0",

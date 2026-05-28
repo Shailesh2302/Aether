@@ -89,11 +89,11 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t omnimind/backend:${{ github.sha }} backend/
+          docker build -t aether/backend:${{ github.sha }} backend/
 
       - name: Run container
         run: |
-          docker run -d --name backend-test -p 8000:8000 omnimind/backend:${{ github.sha }}
+          docker run -d --name backend-test -p 8000:8000 aether/backend:${{ github.sha }}
           sleep 10
           docker logs backend-test
 

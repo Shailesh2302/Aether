@@ -4,7 +4,7 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "OmniMind AI Service"
+    APP_NAME: str = "Aether AI Service"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_GRPC_PORT: int = 6334
-    QDRANT_COLLECTION: str = "omnimind"
+    QDRANT_COLLECTION: str = "aether"
     QDRANT_API_KEY: str = ""
 
     SENTENCE_TRANSFORMER_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"

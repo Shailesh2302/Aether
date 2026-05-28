@@ -46,12 +46,14 @@ class RAGService:
         try:
             query_embedding = await embedding_service.embed_query(query)
 
+            filter_conditions = {"file_id": file_id} if file_id else None
+
             results = await vector_service.search(
                 collection_name=collection,
                 query_embedding=query_embedding,
                 limit=limit,
                 score_threshold=0.3,
-                filter_conditions=None,
+                filter_conditions=filter_conditions,
             )
 
             if not results:

@@ -7,7 +7,7 @@ The Files API provides endpoints for uploading, managing, and processing files (
 ## Base URL
 
 ```
-https://api.omnimind.ai/api/v1/files
+https://api.aether.app/api/v1/files
 ```
 
 ## Endpoints

@@ -124,13 +124,13 @@ jobs:
 
       - name: Build frontend image
         run: |
-          docker build -t omnimind/frontend:${{ github.sha }} frontend/
-          docker build -t omnimind/frontend:latest frontend/
+          docker build -t aether/frontend:${{ github.sha }} frontend/
+          docker build -t aether/frontend:latest frontend/
 
       - name: Build backend image
         run: |
-          docker build -t omnimind/backend:${{ github.sha }} backend/
-          docker build -t omnimind/backend:latest backend/
+          docker build -t aether/backend:${{ github.sha }} backend/
+          docker build -t aether/backend:latest backend/
 
       - name: Test Docker compose
         run: |

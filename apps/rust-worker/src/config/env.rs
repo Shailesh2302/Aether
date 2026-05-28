@@ -19,11 +19,11 @@ impl Config {
             redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string()),
             redis_host: env::var("REDIS_HOST").unwrap_or_else(|_| "localhost".to_string()),
             redis_port: env::var("REDIS_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(6379),
-            queue_name: env::var("QUEUE_NAME").unwrap_or_else(|_| "omnimind:video:queue".to_string()),
-            processing_queue: env::var("PROCESSING_QUEUE").unwrap_or_else(|_| "omnimind:video:processing".to_string()),
+            queue_name: env::var("QUEUE_NAME").unwrap_or_else(|_| "aether:video:queue".to_string()),
+            processing_queue: env::var("PROCESSING_QUEUE").unwrap_or_else(|_| "aether:video:processing".to_string()),
             ws_host: env::var("WS_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             ws_port: env::var("WS_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(9000),
-            storage_path: env::var("STORAGE_PATH").unwrap_or_else(|_| "/tmp/omnimind".to_string()),
+            storage_path: env::var("STORAGE_PATH").unwrap_or_else(|_| "/tmp/aether".to_string()),
             max_concurrent_jobs: env::var("MAX_CONCURRENT_JOBS").ok().and_then(|p| p.parse().ok()).unwrap_or(4),
         })
     }

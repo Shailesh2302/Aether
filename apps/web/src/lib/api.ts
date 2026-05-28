@@ -71,7 +71,7 @@ export interface SearchResult {
 
 export interface Clip {
   id: string;
-  name: string;
+  title: string;
   startTime: number;
   endTime: number;
   fileId: string;
@@ -112,6 +112,7 @@ export const filesApi = {
     return Array.isArray(files) ? files.map((f: any) => ({
       ...f,
       type: f.mimeType,
+      status: f.status?.toLowerCase(),
     })) : files;
   },
   upload: async (file: globalThis.File, onProgress?: (progress: number) => void) => {
@@ -188,12 +189,12 @@ export const clipsApi = {
     const response = await api.get("/clips", { params: { fileId } });
     return response.data;
   },
-  create: async (fileId: string, startTime: number, endTime: number, name: string) => {
-    const response = await api.post("/clips", { fileId, startTime, endTime, name });
+  create: async (fileId: string, startTime: number, endTime: number, title: string) => {
+    const response = await api.post("/clips", { fileId, startTime, endTime, title });
     return response.data;
   },
-  generate: async (fileId: string, startTime: number, endTime: number, name?: string) => {
-    const response = await api.post("/clips/generate", { fileId, startTime, endTime, name });
+  generate: async (fileId: string, startTime: number, endTime: number, title?: string) => {
+    const response = await api.post("/clips/generate", { fileId, startTime, endTime, title });
     return response.data;
   },
   delete: async (id: string) => {
@@ -225,6 +226,15 @@ export interface VideoHighlight {
   importance_score: number;
 }
 
+export interface SmartClip {
+  start_sec: number;
+  end_sec: number;
+  title: string;
+  description: string;
+  importance_score: number;
+  category: string;
+}
+
 export interface VideoTopic {
   topic: string;
   timestamp_sec: number;
@@ -246,19 +256,28 @@ export interface HighlightsResponse {
   topics_covered: string[];
 }
 
+export interface SmartClipsResponse {
+  file_id: string;
+  clips: SmartClip[];
+}
+
 export interface TopicsResponse {
   file_id: string;
   topics: VideoTopic[];
   total_duration_sec: number;
 }
 
+function cleanParams(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+}
+
 export const videoIntelligenceApi = {
   getMoments: async (fileId: string, query?: string, topK?: number): Promise<MomentsResponse> => {
-    const response = await api.post("/video/moments", { fileId, query, topK });
+    const response = await api.post("/video/moments", cleanParams({ fileId, query, topK }));
     return response.data;
   },
   getHighlights: async (fileId: string, categories?: string[], maxHighlights?: number): Promise<HighlightsResponse> => {
-    const response = await api.post("/video/highlights", { fileId, categories, maxHighlights });
+    const response = await api.post("/video/highlights", cleanParams({ fileId, categories, maxHighlights }));
     return response.data;
   },
   getTopics: async (fileId: string): Promise<TopicsResponse> => {

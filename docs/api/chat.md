@@ -7,7 +7,7 @@ The Chat API provides endpoints for creating conversations, sending messages, an
 ## Base URL
 
 ```
-https://api.omnimind.ai/api/v1/chat
+https://api.aether.app/api/v1/chat
 ```
 
 ## Endpoints
@@ -294,13 +294,13 @@ Authorization: Bearer <access_token>
 For real-time chat, connect to the WebSocket endpoint:
 
 ```
-wss://api.omnimind.ai/api/v1/chat/ws
+wss://api.aether.app/api/v1/chat/ws
 ```
 
 ### Authentication
 
 ```
-wss://api.omnimind.ai/api/v1/chat/ws?token=<access_token>
+wss://api.aether.app/api/v1/chat/ws?token=<access_token>
 ```
 
 ### Message Format

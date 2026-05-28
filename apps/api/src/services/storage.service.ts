@@ -29,7 +29,7 @@ class StorageService {
     this.cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'dt50pmuar';
     this.apiKey = process.env.CLOUDINARY_API_KEY || '897834594944128';
     this.apiSecret = process.env.CLOUDINARY_API_SECRET || 'jeyBbFwh6NtIavUzGNrXMmQ8YPI';
-    this.uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || 'omnimind';
+    this.uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || 'aether';
     this.storageType = (process.env.STORAGE_TYPE || 'cloudinary') as 'local' | 'cloudinary' | 's3';
   }
 
@@ -61,7 +61,7 @@ class StorageService {
 
   private async uploadToCloudinary(buffer: Buffer, originalName: string, resourceType: 'image' | 'video' | 'raw' | 'auto'): Promise<StorageResult> {
     const ext = path.extname(originalName).toLowerCase();
-    const publicId = `omnimind/${resourceType}/${uuidv4()}${ext}`;
+    const publicId = `aether/${resourceType}/${uuidv4()}${ext}`;
     
     const base64 = buffer.toString('base64');
     const mimeType = this.getMimeType(ext);

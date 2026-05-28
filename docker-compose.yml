@@ -4,7 +4,7 @@ services:
   # Infrastructure Services (using cloud services)
   qdrant:
     image: qdrant/qdrant:v1.7.4
-    container_name: omnimind-qdrant
+    container_name: aether-qdrant
     restart: unless-stopped
     ports:
       - "6333:6333"
@@ -15,21 +15,21 @@ services:
       QDRANT__SERVICE__GRPC_PORT: 6334
       QDRANT__SERVICE__HTTP_PORT: 6333
       QDRANT__LOG__LEVEL: INFO
-      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-omnimind-dev-key}
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-aether-dev-key}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - omnimind-network
+      - aether-network
 
   # Application Services
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    container_name: omnimind-api
+    container_name: aether-api
     restart: unless-stopped
     ports:
       - "3001:3001"
@@ -54,14 +54,14 @@ services:
       - uploads:/app/storage/uploads
       - clips:/app/storage/clips
     networks:
-      - omnimind-network
+      - aether-network
     command: pnpm run dev
 
   ai-service:
     build:
       context: .
       dockerfile: apps/ai-service/Dockerfile
-    container_name: omnimind-ai-service
+    container_name: aether-ai-service
     restart: unless-stopped
     ports:
       - "3002:3002"
@@ -79,16 +79,16 @@ services:
     volumes:
       - ./apps/ai-service:/app
       - ai_cache:/app/.cache
-      - ./storage/temp:/tmp/omnimind
+      - ./storage/temp:/tmp/aether
     networks:
-      - omnimind-network
+      - aether-network
     command: python -m uvicorn app.main:app --host 0.0.0.0 --port 3002 --reload
 
   rust-worker:
     build:
       context: .
       dockerfile: apps/rust-worker/Dockerfile
-    container_name: omnimind-rust-worker
+    container_name: aether-rust-worker
     restart: unless-stopped
     environment:
       - RUST_LOG=info
@@ -97,16 +97,16 @@ services:
       - REDIS_PORT=${REDIS_PORT:-6379}
     volumes:
       - ./apps/rust-worker:/app
-      - video_uploads:/tmp/omnimind
+      - video_uploads:/tmp/aether
     networks:
-      - omnimind-network
+      - aether-network
     command: cargo run --release
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    container_name: omnimind-web
+    container_name: aether-web
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -121,13 +121,13 @@ services:
       - /app/node_modules
       - /app/.next
     networks:
-      - omnimind-network
+      - aether-network
     command: pnpm run dev
 
   # Monitoring (Optional)
   prometheus:
     image: prom/prometheus:latest
-    container_name: omnimind-prometheus
+    container_name: aether-prometheus
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -138,11 +138,11 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
     networks:
-      - omnimind-network
+      - aether-network
 
   grafana:
     image: grafana/grafana:latest
-    container_name: omnimind-grafana
+    container_name: aether-grafana
     restart: unless-stopped
     ports:
       - "3004:3000"
@@ -153,7 +153,7 @@ services:
       - ./infrastructure/monitoring/grafana:/etc/grafana/provisioning
       - grafana_data:/var/lib/grafana
     networks:
-      - omnimind-network
+      - aether-network
 
 volumes:
   qdrant_data:
@@ -165,5 +165,5 @@ volumes:
   grafana_data:
 
 networks:
-  omnimind-network:
+  aether-network:
     driver: bridge

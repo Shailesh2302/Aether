@@ -97,7 +97,7 @@ export function SmartClipsList({
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h4 className="font-medium text-sm">{clip.name}</h4>
+                    <h4 className="font-medium text-sm">{clip.title}</h4>
                     <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                       <Clock className="h-3 w-3" />
                       <span>

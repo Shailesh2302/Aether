@@ -74,5 +74,5 @@ jobs:
       - name: Publish to Conda
         uses: amnn/conda-publish-action@v1
         with:
-          channel: omnimind
+          channel: aether
           label: ${{ github.event.release.tag_name }}

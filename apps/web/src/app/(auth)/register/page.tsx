@@ -53,7 +53,7 @@ export default function RegisterPage() {
         </div>
         <CardTitle className="text-2xl">Create an account</CardTitle>
         <CardDescription>
-          Get started with OmniMind
+          Get started with Aether
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>

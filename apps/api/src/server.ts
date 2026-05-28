@@ -116,7 +116,7 @@ async function startServer() {
     logger.info('Database connected');
 
     app.listen(config.port, () => {
-      logger.info(`🚀 OmniMind API running on http://localhost:${config.port}`);
+      logger.info(`🚀 Aether API running on http://localhost:${config.port}`);
       logger.info(`📚 Health check: http://localhost:${config.port}/api/health`);
     });
   } catch (error) {

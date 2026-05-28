@@ -9,7 +9,7 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "OmniMind - AI-Powered Content Platform",
+  title: "Aether - AI-Powered Content Platform",
   description: "Upload, manage, and search your content with AI-powered semantic search",
 };
 

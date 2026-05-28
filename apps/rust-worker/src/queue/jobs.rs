@@ -40,7 +40,7 @@ pub struct JobQueue {
 
 impl JobQueue {
     pub fn new(redis: Arc<RedisClient>) -> Self {
-        Self::with_queue(redis, "omnimind:video:queue")
+        Self::with_queue(redis, "aether:video:queue")
     }
 
     pub fn with_queue(redis: Arc<RedisClient>, queue_key: &str) -> Self {

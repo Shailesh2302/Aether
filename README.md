@@ -1,7 +1,7 @@
-# OmniMind
+# Aether
 
 <p align="center">
-  <img src="https://via.placeholder.com/150/4F46E5/ffffff?text=OmniMind" alt="OmniMind Logo" />
+  <img src="https://via.placeholder.com/150/4F46E5/ffffff?text=Aether" alt="Aether Logo" />
 </p>
 
 An AI-powered knowledge management system with vector search, conversational AI, and document processing capabilities.
@@ -27,8 +27,8 @@ An AI-powered knowledge management system with vector search, conversational AI,
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/omnimind/omnimind.git
-cd omnimind
+git clone https://github.com/aether/aether.git
+cd aether
 ```
 
 2. Create environment file:
@@ -51,8 +51,8 @@ cd infrastructure/scripts
 ### Default Credentials
 
 ```
-Admin: admin@omnimind.ai / admin123
-Demo: demo@omnimind.ai / demo123
+Admin: admin@aether.app / admin123
+Demo: demo@aether.app / demo123
 ```
 
 ## Architecture
@@ -88,7 +88,7 @@ PostgreSQL  Redis  Qdrant
 # Login
 curl -X POST http://localhost/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@omnimind.ai", "password": "admin123"}'
+  -d '{"email": "admin@aether.app", "password": "admin123"}'
 ```
 
 ### Upload Document
@@ -161,11 +161,11 @@ cd infrastructure/scripts
 version: '3.8'
 services:
   backend:
-    image: omnimind/backend:latest
+    image: aether/backend:latest
     ports:
       - "8000:8000"
   frontend:
-    image: omnimind/frontend:latest
+    image: aether/frontend:latest
     ports:
       - "3000:3000"
   postgres:
@@ -200,7 +200,7 @@ Access dashboards at: `http://localhost:3001`
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection | postgres://omnimind:omnimind@postgres:5432/omnimind |
+| `DATABASE_URL` | PostgreSQL connection | postgres://aether:aether@postgres:5432/aether |
 | `REDIS_URL` | Redis connection | redis://redis:6379 |
 | `QDRANT_URL` | Qdrant URL | http://qdrant:6333 |
 | `JWT_SECRET` | JWT signing secret | change-me |
@@ -212,6 +212,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-- Documentation: https://docs.omnimind.ai
-- Issues: https://github.com/omnimind/omnimind/issues
-- Discord: https://discord.gg/omnimind
+- Documentation: https://docs.aether.app
+- Issues: https://github.com/aether/aether/issues
+- Discord: https://discord.gg/aether

@@ -62,7 +62,7 @@ export default function ClipsPage() {
     } catch (error) {
       const newClip: Clip = {
         id: `local-${Date.now()}`,
-        name,
+        title: name,
         startTime,
         endTime,
         fileId: selectedFile.id,
@@ -194,7 +194,7 @@ export default function ClipsPage() {
         <DialogContent className="max-w-4xl">
           {playingClip && (
             <div className="space-y-4">
-              <h3 className="font-semibold">{playingClip.name}</h3>
+              <h3 className="font-semibold">{playingClip.title}</h3>
               <VideoPlayer
                 src={allFiles.find((f) => f.id === playingClip.fileId)?.url || ""}
                 initialTime={playingClip.startTime}

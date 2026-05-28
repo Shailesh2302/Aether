@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Starting OmniMind All Services..."
+echo "🚀 Starting Aether All Services..."
 echo "======================================"
 
 # Colors for output
@@ -18,29 +18,29 @@ command_exists() {
 start_services() {
     # Start Web (Next.js)
     echo -e "${GREEN}[1/4]${NC} Starting Web (Next.js)..."
-    cd /home/shailesh/Desktop/omnimind/apps/web
-    pnpm run dev > /tmp/omnimind-web.log 2>&1 &
+    cd /home/shailesh/Desktop/aether/apps/web
+    pnpm run dev > /tmp/aether-web.log 2>&1 &
     WEB_PID=$!
     echo "Web PID: $WEB_PID"
 
     # Start API (Node.js)
     echo -e "${GREEN}[2/4]${NC} Starting API (Node.js)..."
-    cd /home/shailesh/Desktop/omnimind/apps/api
-    pnpm run dev > /tmp/omnimind-api.log 2>&1 &
+    cd /home/shailesh/Desktop/aether/apps/api
+    pnpm run dev > /tmp/aether-api.log 2>&1 &
     API_PID=$!
     echo "API PID: $API_PID"
 
     # Start AI Service (Python)
     echo -e "${GREEN}[3/4]${NC} Starting AI Service (Python)..."
-    cd /home/shailesh/Desktop/omnimind/apps/ai-service
-    python -m uvicorn app.main:app --host 0.0.0.0 --port 3002 --reload > /tmp/omnimind-ai.log 2>&1 &
+    cd /home/shailesh/Desktop/aether/apps/ai-service
+    python -m uvicorn app.main:app --host 0.0.0.0 --port 3002 --reload > /tmp/aether-ai.log 2>&1 &
     AI_PID=$!
     echo "AI PID: $AI_PID"
 
     # Start Rust Worker
     echo -e "${GREEN}[4/4]${NC} Starting Rust Worker..."
-    cd /home/shailesh/Desktop/omnimind/apps/rust-worker
-    cargo run --release > /tmp/omnimind-rust.log 2>&1 &
+    cd /home/shailesh/Desktop/aether/apps/rust-worker
+    cargo run --release > /tmp/aether-rust.log 2>&1 &
     RUST_PID=$!
     echo "Rust PID: $RUST_PID"
 
@@ -55,17 +55,17 @@ start_services() {
     echo -e "  📚 Qdrant:  ${YELLOW}http://localhost:6333${NC}"
     echo ""
     echo "Logs:"
-    echo "  Web:  /tmp/omnimind-web.log"
-    echo "  API:  /tmp/omnimind-api.log"
-    echo "  AI:   /tmp/omnimind-ai.log"
-    echo "  Rust: /tmp/omnimind-rust.log"
+    echo "  Web:  /tmp/aether-web.log"
+    echo "  API:  /tmp/aether-api.log"
+    echo "  AI:   /tmp/aether-ai.log"
+    echo "  Rust: /tmp/aether-rust.log"
     echo ""
     echo "To stop all services, run: pkill -f 'next dev\|uvicorn\|cargo run'"
 }
 
 # Stop all services
 stop_services() {
-    echo "Stopping all OmniMind services..."
+    echo "Stopping all Aether services..."
     pkill -f "next dev" 2>/dev/null
     pkill -f "uvicorn" 2>/dev/null
     pkill -f "cargo run" 2>/dev/null
@@ -75,13 +75,13 @@ stop_services() {
 # Show logs
 show_logs() {
     echo "=== Web Logs ==="
-    tail -20 /tmp/omnimind-web.log 2>/dev/null || echo "No logs yet"
+    tail -20 /tmp/aether-web.log 2>/dev/null || echo "No logs yet"
     echo ""
     echo "=== API Logs ==="
-    tail -20 /tmp/omnimind-api.log 2>/dev/null || echo "No logs yet"
+    tail -20 /tmp/aether-api.log 2>/dev/null || echo "No logs yet"
     echo ""
     echo "=== AI Logs ==="
-    tail -20 /tmp/omnimind-ai.log 2>/dev/null || echo "No logs yet"
+    tail -20 /tmp/aether-ai.log 2>/dev/null || echo "No logs yet"
 }
 
 # Main command

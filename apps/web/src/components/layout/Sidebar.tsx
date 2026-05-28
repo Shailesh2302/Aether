@@ -36,7 +36,7 @@ export function Sidebar() {
           <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
             <Sparkles className="h-4 w-4 text-white" />
           </div>
-          <span className="text-lg font-bold">OmniMind</span>
+          <span className="text-lg font-bold">Aether</span>
         </div>
         
         <nav className="space-y-1">

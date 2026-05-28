@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useUpload } from "@/hooks/useUpload";
 import { useVideoChat } from "@/hooks/useVideoChat";
 import { useVideoIntelligence } from "@/hooks/useVideoIntelligence";
@@ -32,7 +32,9 @@ type SidebarTab = "ai" | "summary" | "ask" | "clips";
 export default function VideoDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileId = params.id as string;
+  const seekTime = searchParams.get("t");
   const { uploadedFiles } = useUpload();
   
   const { currentTime, setCurrentTime } = useVideoChat();
@@ -67,7 +69,14 @@ export default function VideoDetailPage() {
     seekTo: (time: number) => void;
   }) => {
     setPlayerState(player);
-  }, []);
+    if (seekTime) {
+      const t = parseFloat(seekTime);
+      if (!isNaN(t)) {
+        player.seekTo(t);
+        setCurrentTime(t);
+      }
+    }
+  }, [seekTime, setCurrentTime]);
 
   const handleSeek = useCallback((time: number) => {
     playerState?.seekTo(time);
@@ -147,12 +156,12 @@ export default function VideoDetailPage() {
             {file.duration ? `${Math.floor(file.duration / 60)}:${String(Math.floor(file.duration % 60)).padStart(2, '0')}` : '--:--'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
           <Button 
             variant="outline" 
             size="sm"
             onClick={() => router.push(`/dashboard/videos/${fileId}/moments`)}
-            className="gap-1"
+            className="gap-1 shrink-0"
           >
             <Clock className="h-4 w-4" />
             Moments
@@ -161,7 +170,7 @@ export default function VideoDetailPage() {
             variant="outline" 
             size="sm"
             onClick={() => router.push(`/dashboard/videos/${fileId}/highlights`)}
-            className="gap-1"
+            className="gap-1 shrink-0"
           >
             <Zap className="h-4 w-4" />
             Highlights
@@ -170,7 +179,7 @@ export default function VideoDetailPage() {
             variant="outline" 
             size="sm"
             onClick={() => router.push(`/dashboard/videos/${fileId}/topics`)}
-            className="gap-1"
+            className="gap-1 shrink-0"
           >
             <Lightbulb className="h-4 w-4" />
             Topics
@@ -179,19 +188,46 @@ export default function VideoDetailPage() {
             variant="outline" 
             size="sm"
             onClick={() => router.push(`/dashboard/videos/${fileId}/summary`)}
-            className="gap-1"
+            className="gap-1 shrink-0"
           >
             <FileText className="h-4 w-4" />
             Summary
           </Button>
           <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => router.push(`/dashboard/videos/${fileId}/ask`)}
+            className="gap-1 shrink-0"
+          >
+            <MessageSquare className="h-4 w-4" />
+            Ask
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => router.push(`/dashboard/videos/${fileId}/smart-clips`)}
+            className="gap-1 shrink-0"
+          >
+            <Scissors className="h-4 w-4" />
+            Smart Clips
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => router.push(`/dashboard/videos/${fileId}/status`)}
+            className="gap-1 shrink-0"
+          >
+            <Clock className="h-4 w-4" />
+            Status
+          </Button>
+          <Button 
             variant="default" 
             size="sm"
             onClick={() => router.push(`/dashboard/videos/${fileId}/intelligence`)}
-            className="gap-1"
+            className="gap-1 shrink-0"
           >
             <Brain className="h-4 w-4" />
-            All AI Features
+            All AI
           </Button>
         </div>
         <Button variant="ghost" size="icon">

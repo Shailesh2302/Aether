@@ -1,7 +1,7 @@
 {
   "dashboard": {
-    "title": "OmniMind System Overview",
-    "tags": ["omnimind", "system"],
+    "title": "Aether System Overview",
+    "tags": ["aether", "system"],
     "timezone": "browser",
     "panels": [
       {

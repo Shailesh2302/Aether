@@ -27,6 +27,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
         mimeType: true,
         size: true,
         status: true,
+        url: true,
         createdAt: true,
         updatedAt: true,
       },

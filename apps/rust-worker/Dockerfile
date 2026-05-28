@@ -26,14 +26,14 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/omnimind-rust-worker /usr/local/bin/
+COPY --from=builder /app/target/release/aether-rust-worker /usr/local/bin/
 
-RUN mkdir -p /tmp/omnimind/{video,audio,clips,thumbnails}
+RUN mkdir -p /tmp/aether/{video,audio,clips,thumbnails}
 
 ENV RUST_LOG=info
 ENV REDIS_URL=redis://localhost:6379
-ENV STORAGE_PATH=/tmp/omnimind
+ENV STORAGE_PATH=/tmp/aether
 
 EXPOSE 9000
 
-CMD ["omnimind-rust-worker"]
+CMD ["aether-rust-worker"]

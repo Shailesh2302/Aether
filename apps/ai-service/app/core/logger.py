@@ -27,9 +27,9 @@ def setup_logger(name: str) -> logging.Logger:
     return logger
 
 
-app_logger = setup_logger("omnimind")
-request_logger = setup_logger("omnimind.requests")
-error_logger = setup_logger("omnimind.errors")
+app_logger = setup_logger("aether")
+request_logger = setup_logger("aether.requests")
+error_logger = setup_logger("aether.errors")
 
 
 def log_request(method: str, path: str, status_code: int, duration: float) -> None:

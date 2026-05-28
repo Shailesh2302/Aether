@@ -42,7 +42,7 @@ export function ClipsList({ clips, onPlay, onDelete, onDownload }: ClipsListProp
           </Button>
 
           <div className="flex-1 min-w-0">
-            <h4 className="font-medium truncate">{clip.name}</h4>
+            <h4 className="font-medium truncate">{clip.title}</h4>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span>{formatDuration(clip.endTime - clip.startTime)}</span>
               <span>

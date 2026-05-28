@@ -24,7 +24,7 @@ impl VideoWorker {
 
     fn get_storage_path(&self) -> String {
         std::env::var("STORAGE_BASE_PATH")
-            .unwrap_or_else(|_| "/home/shailesh/Desktop/omnimind/storage".to_string())
+            .unwrap_or_else(|_| "/home/shailesh/Desktop/aether/storage".to_string())
     }
 
     fn resolve_file_path(&self, path: &str) -> String {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, SmartClip } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -56,15 +56,6 @@ interface VideoTopic {
   relevance_score: number;
 }
 
-interface SmartClip {
-  start_sec: number;
-  end_sec: number;
-  title: string;
-  description: string;
-  importance_score: number;
-  category: string;
-}
-
 interface VideoSummary {
   summary: string;
   topics: string[];
@@ -109,7 +100,7 @@ export default function VideoIntelligencePage() {
   const detectMoments = async () => {
     setMomentsLoading(true);
     try {
-      const response = await api.post("/video/moments", { fileId, maxMoments: 10 });
+      const response = await api.post("/video/moments", { fileId, topK: 10 });
       setMoments(response.data.moments);
       await fetchStatus();
     } catch (error) {
@@ -164,7 +155,7 @@ export default function VideoIntelligencePage() {
   const generateSmartClips = async () => {
     setClipsLoading(true);
     try {
-      const response = await api.post("/video-features/smart-clips", { fileId, numClips: 10 });
+      const response = await api.post("/video-features/smart-clips", { fileId, maxClips: 10 });
       setSmartClips(response.data.clips);
       await fetchStatus();
     } catch (error) {
@@ -430,7 +421,7 @@ export default function VideoIntelligencePage() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1 mb-2">
-                        {topic.keywords.map((keyword, j) => (
+                        {(topic.keywords ?? []).map((keyword, j) => (
                           <Badge key={j} variant="secondary" className="text-xs">
                             {keyword}
                           </Badge>

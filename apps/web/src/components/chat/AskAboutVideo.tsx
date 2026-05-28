@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Send, Loader2, MessageSquare, Play, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,20 @@ interface AskAboutVideoProps {
   className?: string;
 }
 
+function parseSSEStream(chunk: string): string {
+  let result = "";
+  const lines = chunk.split("\n");
+  for (const line of lines) {
+    if (line.startsWith("data: ")) {
+      const data = line.slice(6);
+      if (data !== "[DONE]") {
+        result += data;
+      }
+    }
+  }
+  return result;
+}
+
 export function AskAboutVideo({
   fileId,
   onSeek,
@@ -32,9 +46,15 @@ export function AskAboutVideo({
   const [streamingContent, setStreamingContent] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (streamingContent) scrollToBottom();
+  }, [streamingContent, scrollToBottom]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -51,7 +71,7 @@ export function AskAboutVideo({
     setStreamingContent("");
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/video/ask`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/video-features/ask`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -75,7 +95,8 @@ export function AskAboutVideo({
           if (done) break;
 
           const chunk = decoder.decode(value);
-          fullContent += chunk;
+          const parsed = parseSSEStream(chunk);
+          fullContent += parsed;
           setStreamingContent(fullContent);
         }
       }

@@ -16,8 +16,8 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
-      "@omnimind/ui": ["../../packages/ui/src"],
-      "@omnimind/types": ["../../packages/types/src"]
+      "@aether/ui": ["../../packages/ui/src"],
+      "@aether/types": ["../../packages/types/src"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

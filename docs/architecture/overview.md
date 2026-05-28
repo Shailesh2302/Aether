@@ -1,8 +1,8 @@
-# OmniMind Architecture Overview
+# Aether Architecture Overview
 
 ## System Architecture
 
-OmniMind is a modern AI-powered knowledge management system that combines vector search, conversational AI, and document processing capabilities.
+Aether is a modern AI-powered knowledge management system that combines vector search, conversational AI, and document processing capabilities.
 
 ### High-Level Architecture
 

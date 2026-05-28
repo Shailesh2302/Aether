@@ -31,7 +31,7 @@ pub struct AppState {
 async fn main() -> anyhow::Result<()> {
     init_logging();
 
-    info!("Starting OmniMind Rust Worker");
+    info!("Starting Aether Rust Worker");
 
     let config = Config::from_env()?;
     info!("Configuration loaded: Redis at {}, Queue: {}",
@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    info!("OmniMind Rust Worker started successfully");
+    info!("Aether Rust Worker started successfully");
     info!("WebSocket server running on ws://0.0.0.0:9000");
     info!("Queue worker processing jobs from Redis");
     info!("Ready to process video jobs from Redis queue");
@@ -77,6 +77,6 @@ async fn main() -> anyhow::Result<()> {
         _ = ws_handle => {}
     }
 
-    info!("Shutting down OmniMind Rust Worker");
+    info!("Shutting down Aether Rust Worker");
     Ok(())
 }

@@ -8,7 +8,24 @@ import { Button } from "@/components/ui/button";
 import { VideoThumbnail } from "@/components/video/VideoThumbnail";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Upload, Play, Scissors, MessageSquare } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Upload,
+  Play,
+  Scissors,
+  MessageSquare,
+  MoreVertical,
+  Clock,
+  Zap,
+  Lightbulb,
+  FileText,
+  Activity,
+} from "lucide-react";
 import Link from "next/link";
 
 export default function VideosPage() {
@@ -74,13 +91,60 @@ export default function VideosPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {videos.map((video) => (
-            <div key={video.id} className="relative">
+            <div key={video.id} className="relative group">
               <VideoThumbnail
                 file={video}
                 onPlay={() => setSelectedVideo(video)}
                 onDelete={() => handleDelete(video.id)}
                 onCreateClip={() => setClipVideo(video)}
               />
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="secondary" size="icon" className="h-8 w-8">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem onClick={() => setSelectedVideo(video)}>
+                      <Play className="h-4 w-4 mr-2" />
+                      Play
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/videos/${video.id}/moments`)}>
+                      <Clock className="h-4 w-4 mr-2" />
+                      Moments
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/videos/${video.id}/highlights`)}>
+                      <Zap className="h-4 w-4 mr-2" />
+                      Highlights
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/videos/${video.id}/topics`)}>
+                      <Lightbulb className="h-4 w-4 mr-2" />
+                      Topics
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/videos/${video.id}/summary`)}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Summary
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/videos/${video.id}/ask`)}>
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Ask
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/videos/${video.id}/smart-clips`)}>
+                      <Scissors className="h-4 w-4 mr-2" />
+                      Smart Clips
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/videos/${video.id}/status`)}>
+                      <Activity className="h-4 w-4 mr-2" />
+                      Status
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/videos/${video.id}`)}>
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Chat
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
               <Button
                 variant="secondary"
                 size="sm"

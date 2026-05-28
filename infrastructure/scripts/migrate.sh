@@ -4,13 +4,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-echo "=== OmniMind Database Migration ==="
+echo "=== Aether Database Migration ==="
 
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
-DB_NAME="${DB_NAME:-omnimind}"
-DB_USER="${DB_USER:-omnimind}"
-DB_PASSWORD="${DB_PASSWORD:-omnimind_secret}"
+DB_NAME="${DB_NAME:-aether}"
+DB_USER="${DB_USER:-aether}"
+DB_PASSWORD="${DB_PASSWORD:-aether_secret}"
 
 export PGPASSWORD="$DB_PASSWORD"
 
@@ -45,7 +45,7 @@ run_migrations() {
         echo "Running migrations via Docker container..."
 
         docker exec -i "$container_id" psql -U "$DB_USER" -d "$DB_NAME" < "$migrations_dir/migrations.sql" 2>/dev/null || \
-        docker exec -i "$container_id" sh -c 'psql -U omnimind -d omnimind' < "$migrations_dir/migrations.sql"
+        docker exec -i "$container_id" sh -c 'psql -U aether -d aether' < "$migrations_dir/migrations.sql"
     fi
 
     echo "Migrations completed successfully"

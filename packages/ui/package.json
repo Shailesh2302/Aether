@@ -1,5 +1,5 @@
 {
-  "name": "@omnimind/ui",
+  "name": "@aether/ui",
   "version": "1.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -30,7 +30,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@omnimind/types": "workspace:*",
+    "@aether/types": "workspace:*",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.2.1"
   }

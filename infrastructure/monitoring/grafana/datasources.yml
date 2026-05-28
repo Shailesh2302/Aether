@@ -27,8 +27,8 @@ datasources:
     type: postgres
     access: proxy
     url: postgres:5432
-    database: omnimind
-    user: omnimind
+    database: aether
+    user: aether
     editable: false
     jsonData:
       sslmode: "disable"

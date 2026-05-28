@@ -265,7 +265,7 @@ importers:
 
   packages/ui:
     dependencies:
-      '@omnimind/types':
+      '@aether/types':
         specifier: workspace:*
         version: link:../types
       clsx:

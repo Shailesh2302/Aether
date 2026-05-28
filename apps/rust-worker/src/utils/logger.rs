@@ -9,7 +9,7 @@ pub fn init_logging() {
     let file_appender = RollingFileAppender::new(
         Rotation::DAILY,
         &log_dir,
-        "omnimind-worker.log",
+        "aether-worker.log",
     );
 
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
@@ -42,10 +42,10 @@ pub fn init_logging() {
 fn get_log_directory() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("omnimind")
+        .join("aether")
         .join("logs")
 }
 
 pub fn get_log_path() -> PathBuf {
-    get_log_directory().join("omnimind-worker.log")
+    get_log_directory().join("aether-worker.log")
 }

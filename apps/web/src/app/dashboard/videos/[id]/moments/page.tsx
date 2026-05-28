@@ -49,7 +49,7 @@ export default function VideoMomentsPage() {
   const detectMoments = async (topK: number = 10) => {
     setAnalyzing(true);
     try {
-      const response = await api.post("/video/moments", { fileId, maxMoments: topK });
+      const response = await api.post("/video/moments", { fileId, topK });
       setMoments(response.data.moments);
     } catch (error) {
       console.error("Failed to detect moments:", error);

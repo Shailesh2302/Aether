@@ -37,9 +37,9 @@ export interface ClipJobData {
 class QueueService {
   private redis: Redis | null = null;
   private redisConnected = false;
-  private videoQueueName = 'omnimind:video:queue';
-  private documentQueueName = 'omnimind:document:queue';
-  private clipQueueName = 'omnimind:clip:queue';
+  private videoQueueName = 'aether:video:queue';
+  private documentQueueName = 'aether:document:queue';
+  private clipQueueName = 'aether:clip:queue';
 
   constructor() {
     this.initRedis();
@@ -109,8 +109,8 @@ class QueueService {
 
     await this.safeRedisOperation('lpush', async (redis) => {
       await redis.lpush(this.videoQueueName, JSON.stringify(job));
-      await redis.hset(`omnimind:job:${jobId}`, 'data', JSON.stringify(job));
-      await redis.hset(`omnimind:job:${jobId}`, 'status', 'Queued');
+      await redis.hset(`aether:job:${jobId}`, 'data', JSON.stringify(job));
+      await redis.hset(`aether:job:${jobId}`, 'status', 'Queued');
     });
 
     logger.info({ jobId, fileId: data.fileId }, 'Video processing job added to queue');
@@ -134,8 +134,8 @@ class QueueService {
 
     await this.safeRedisOperation('lpush', async (redis) => {
       await redis.lpush(this.documentQueueName, JSON.stringify(job));
-      await redis.hset(`omnimind:job:${jobId}`, 'data', JSON.stringify(job));
-      await redis.hset(`omnimind:job:${jobId}`, 'status', 'Queued');
+      await redis.hset(`aether:job:${jobId}`, 'data', JSON.stringify(job));
+      await redis.hset(`aether:job:${jobId}`, 'status', 'Queued');
     });
 
     logger.info({ jobId, fileId: data.fileId }, 'Document processing job added to queue');
@@ -152,14 +152,14 @@ class QueueService {
       video_id: data.fileId,
       start_time: data.startTime,
       end_time: data.endTime,
-      output_path: `/tmp/omnimind/clips/clip-${jobId}.mp4`,
+      output_path: `/tmp/aether/clips/clip-${jobId}.mp4`,
       status: 'Queued',
     };
 
     await this.safeRedisOperation('lpush', async (redis) => {
       await redis.lpush(this.clipQueueName, JSON.stringify(job));
-      await redis.hset(`omnimind:job:${jobId}`, 'data', JSON.stringify(job));
-      await redis.hset(`omnimind:job:${jobId}`, 'status', 'Queued');
+      await redis.hset(`aether:job:${jobId}`, 'data', JSON.stringify(job));
+      await redis.hset(`aether:job:${jobId}`, 'status', 'Queued');
     });
 
     logger.info({ jobId, fileId: data.fileId }, 'Clip generation job added to queue');
@@ -168,14 +168,14 @@ class QueueService {
 
   async updateJobStatus(jobId: string, status: string): Promise<void> {
     await this.safeRedisOperation('hset', async (redis) => {
-      await redis.hset(`omnimind:job:${jobId}`, 'status', status);
+      await redis.hset(`aether:job:${jobId}`, 'status', status);
     });
     logger.info({ jobId, status }, 'Job status updated');
   }
 
   async getJobStatus(jobId: string): Promise<string | null> {
     const result = await this.safeRedisOperation('hget', async (redis) => {
-      return await redis.hget(`omnimind:job:${jobId}`, 'status');
+      return await redis.hget(`aether:job:${jobId}`, 'status');
     });
     return result;
   }

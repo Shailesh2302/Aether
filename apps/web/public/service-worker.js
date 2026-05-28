@@ -1,4 +1,4 @@
-const CACHE_NAME = 'omnimind-v1';
+const CACHE_NAME = 'aether-v1';
 const OFFLINE_URL = '/';
 
 self.addEventListener('install', (event) => {

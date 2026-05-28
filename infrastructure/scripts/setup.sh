@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-echo "=== OmniMind Setup Script ==="
+echo "=== Aether Setup Script ==="
 echo "Project root: $PROJECT_ROOT"
 
 check_docker() {

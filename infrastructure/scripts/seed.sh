@@ -4,13 +4,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-echo "=== OmniMind Database Seed ==="
+echo "=== Aether Database Seed ==="
 
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
-DB_NAME="${DB_NAME:-omnimind}"
-DB_USER="${DB_USER:-omnimind}"
-DB_PASSWORD="${DB_PASSWORD:-omnimind_secret}"
+DB_NAME="${DB_NAME:-aether}"
+DB_USER="${DB_USER:-aether}"
+DB_PASSWORD="${DB_PASSWORD:-aether_secret}"
 
 export PGPASSWORD="$DB_PASSWORD"
 
@@ -20,8 +20,8 @@ seed_users() {
     PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
         INSERT INTO users (email, username, password_hash, created_at)
         VALUES
-            ('admin@omnimind.ai', 'admin', '\$2b\$12\$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYzf6Z0K4i.', NOW()),
-            ('demo@omnimind.ai', 'demo', '\$2b\$12\$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYzf6Z0K4i.', NOW())
+            ('admin@aether.app', 'admin', '\$2b\$12\$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYzf6Z0K4i.', NOW()),
+            ('demo@aether.app', 'demo', '\$2b\$12\$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYzf6Z0K4i.', NOW())
         ON CONFLICT (email) DO NOTHING;"
 }
 
@@ -42,8 +42,8 @@ seed_documents() {
     PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "
         INSERT INTO documents (collection_id, title, content, file_type, status, created_at)
         VALUES
-            (1, 'Welcome Document', 'Welcome to OmniMind. This is your personal AI assistant.', 'txt', 'indexed', NOW()),
-            (1, 'Getting Started', 'Learn how to use OmniMind effectively.', 'md', 'indexed', NOW())
+            (1, 'Welcome Document', 'Welcome to Aether. This is your personal AI assistant.', 'txt', 'indexed', NOW()),
+            (1, 'Getting Started', 'Learn how to use Aether effectively.', 'md', 'indexed', NOW())
         ON CONFLICT DO NOTHING;"
 }
 
@@ -78,8 +78,8 @@ main() {
     echo ""
     echo "=== Seed Complete ==="
     echo "Default credentials:"
-    echo "  Admin: admin@omnimind.ai / admin123"
-    echo "  Demo: demo@omnimind.ai / demo123"
+    echo "  Admin: admin@aether.app / admin123"
+    echo "  Demo: demo@aether.app / demo123"
 }
 
 main "$@"

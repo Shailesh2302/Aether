@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 import uuid
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, Filter, FieldCondition, MatchValue
+from qdrant_client.models import Distance, VectorParams, Filter, FieldCondition, MatchValue, PayloadSchemaType
 from app.core.config import get_settings
 from app.core.logger import app_logger
 
@@ -19,6 +19,17 @@ class VectorService:
         )
         app_logger.info(f"Vector service initialized: {host}")
 
+    async def ensure_payload_indexes(self, collection_name: str) -> None:
+        for field in ["file_id", "user_id", "document_id"]:
+            try:
+                self.client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name=field,
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
+            except Exception:
+                pass
+
     async def create_collection(
         self,
         collection_name: str,
@@ -33,6 +44,7 @@ class VectorService:
                     distance=distance,
                 ),
             )
+            await self.ensure_payload_indexes(collection_name)
             app_logger.info(f"Collection created: {collection_name}")
             return True
         except Exception as e:
@@ -85,6 +97,7 @@ class VectorService:
         try:
             search_filter = None
             if filter_conditions:
+                await self.ensure_payload_indexes(collection_name)
                 search_filter = Filter(
                     must=[
                         FieldCondition(
@@ -152,6 +165,7 @@ class VectorService:
 
             filter_cond = None
             if file_id:
+                await self.ensure_payload_indexes(collection_name)
                 filter_cond = QdrantFilter(
                     must=[FieldCondition(key="file_id", match=MatchValue(value=file_id))]
                 )

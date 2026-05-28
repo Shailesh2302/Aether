@@ -1,5 +1,5 @@
 {
-  "name": "@omnimind/config",
+  "name": "@aether/config",
   "version": "1.0.0",
   "private": true,
   "main": "index.js",

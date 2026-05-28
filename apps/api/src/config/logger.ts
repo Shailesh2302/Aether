@@ -20,7 +20,7 @@ export const logger = pino({
   },
   timestamp: pino.stdTimeFunctions.isoTime,
   base: {
-    service: 'omnimind-api',
+    service: 'aether-api',
     env: config.nodeEnv,
   },
 });

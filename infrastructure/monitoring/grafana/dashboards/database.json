@@ -1,7 +1,7 @@
 {
   "dashboard": {
-    "title": "OmniMind Database Metrics",
-    "tags": ["omnimind", "database", "postgres"],
+    "title": "Aether Database Metrics",
+    "tags": ["aether", "database", "postgres"],
     "timezone": "browser",
     "panels": [
       {

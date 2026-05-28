@@ -5,10 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 ENVIRONMENT="${1:-development}"
-REGISTRY="${REGISTRY:-omnimind}"
+REGISTRY="${REGISTRY:-aether}"
 VERSION="${VERSION:-latest}"
 
-echo "=== OmniMind Deploy Script ==="
+echo "=== Aether Deploy Script ==="
 echo "Environment: $ENVIRONMENT"
 echo "Version: $VERSION"
 

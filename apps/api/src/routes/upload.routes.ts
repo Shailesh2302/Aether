@@ -167,6 +167,7 @@ router.post(
           mimeType: file.mimeType,
           size: Number(file.size),
           status: file.status,
+          url: file.url,
           createdAt: file.createdAt,
         },
       });
@@ -244,6 +245,7 @@ router.post(
             mimeType: dbFile.mimeType,
             size: Number(dbFile.size),
             status: dbFile.status,
+            url: dbFile.url,
             createdAt: dbFile.createdAt,
           };
         })

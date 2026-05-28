@@ -1,12 +1,12 @@
-<mxfile host="app.diagrams.net" modified="2024-01-15T00:00:00.000Z" agent="OmniMind" version="21.0.0" type="device">
-  <diagram id="architecture" name="OmniMind Architecture">
+<mxfile host="app.diagrams.net" modified="2024-01-15T00:00:00.000Z" agent="Aether" version="21.0.0" type="device">
+  <diagram id="architecture" name="Aether Architecture">
     <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="900" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
         <!-- Title -->
-        <mxCell id="title" value="OmniMind System Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=20;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+        <mxCell id="title" value="Aether System Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=20;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
           <mxGeometry x="400" y="20" width="400" height="40" as="geometry" />
         </mxCell>
 

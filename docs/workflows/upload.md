@@ -28,7 +28,7 @@ The upload workflow handles file uploads, processing, and indexing into the vect
 The user uploads a file through the frontend or API:
 
 ```bash
-curl -X POST https://api.omnimind.ai/api/v1/files/upload \
+curl -X POST https://api.aether.app/api/v1/files/upload \
   -H "Authorization: Bearer <token>" \
   -F "file=@document.pdf" \
   -F "collection_id=1"
@@ -57,7 +57,7 @@ The uploaded file is stored:
 2. Generate file path identifier
 3. Store metadata in PostgreSQL
 
-**Storage Path**: `s3://omnimind-files/{user_id}/{file_id}/{filename}`
+**Storage Path**: `s3://aether-files/{user_id}/{file_id}/{filename}`
 
 ### 3. Processing Queue
 

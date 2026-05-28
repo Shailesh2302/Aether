@@ -3,20 +3,20 @@ import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 
 const QUEUES = {
-  video: 'omnimind:video:queue',
-  document: 'omnimind:document:queue',
-  clip: 'omnimind:clip:queue',
+  video: 'aether:video:queue',
+  document: 'aether:document:queue',
+  clip: 'aether:clip:queue',
 };
 
 async function processVideoJob(redis: Redis, jobKey: string) {
-  const jobData = await redis.hgetall(`omnimind:job:${jobKey}`);
+  const jobData = await redis.hgetall(`aether:job:${jobKey}`);
   if (!jobData || !jobData.data) return;
 
   const job = JSON.parse(jobData.data);
   logger.info({ jobId: jobKey, type: 'video', fileId: job.video_id }, 'Processing video job');
 
   try {
-    await redis.hset(`omnimind:job:${jobKey}`, 'status', 'PROCESSING');
+    await redis.hset(`aether:job:${jobKey}`, 'status', 'PROCESSING');
 
     const apiUrl = `http://localhost:${config.port}`;
     const aiUrl = config.aiServiceUrl;
@@ -42,24 +42,24 @@ async function processVideoJob(redis: Redis, jobKey: string) {
       throw new Error(`Indexing failed: ${errText}`);
     }
 
-    await redis.hset(`omnimind:job:${jobKey}`, 'status', 'COMPLETED');
+    await redis.hset(`aether:job:${jobKey}`, 'status', 'COMPLETED');
     logger.info({ jobId: jobKey }, 'Video job completed');
   } catch (err) {
     logger.error({ jobId: jobKey, err }, 'Video job failed');
-    await redis.hset(`omnimind:job:${jobKey}`, 'status', 'FAILED');
-    await redis.hset(`omnimind:job:${jobKey}`, 'error', (err as Error).message);
+    await redis.hset(`aether:job:${jobKey}`, 'status', 'FAILED');
+    await redis.hset(`aether:job:${jobKey}`, 'error', (err as Error).message);
   }
 }
 
 async function processDocumentJob(redis: Redis, jobKey: string) {
-  const jobData = await redis.hgetall(`omnimind:job:${jobKey}`);
+  const jobData = await redis.hgetall(`aether:job:${jobKey}`);
   if (!jobData || !jobData.data) return;
 
   const job = JSON.parse(jobData.data);
   logger.info({ jobId: jobKey, type: 'document', fileId: job.document_id }, 'Processing document job');
 
   try {
-    await redis.hset(`omnimind:job:${jobKey}`, 'status', 'PROCESSING');
+    await redis.hset(`aether:job:${jobKey}`, 'status', 'PROCESSING');
 
     const aiUrl = config.aiServiceUrl;
 
@@ -79,24 +79,24 @@ async function processDocumentJob(redis: Redis, jobKey: string) {
       throw new Error(`Indexing failed: ${errText}`);
     }
 
-    await redis.hset(`omnimind:job:${jobKey}`, 'status', 'COMPLETED');
+    await redis.hset(`aether:job:${jobKey}`, 'status', 'COMPLETED');
     logger.info({ jobId: jobKey }, 'Document job completed');
   } catch (err) {
     logger.error({ jobId: jobKey, err }, 'Document job failed');
-    await redis.hset(`omnimind:job:${jobKey}`, 'status', 'FAILED');
-    await redis.hset(`omnimind:job:${jobKey}`, 'error', (err as Error).message);
+    await redis.hset(`aether:job:${jobKey}`, 'status', 'FAILED');
+    await redis.hset(`aether:job:${jobKey}`, 'error', (err as Error).message);
   }
 }
 
 async function processClipJob(redis: Redis, jobKey: string) {
-  const jobData = await redis.hgetall(`omnimind:job:${jobKey}`);
+  const jobData = await redis.hgetall(`aether:job:${jobKey}`);
   if (!jobData || !jobData.data) return;
 
   const job = JSON.parse(jobData.data);
   logger.info({ jobId: jobKey, type: 'clip', fileId: job.video_id }, 'Processing clip job');
 
   try {
-    await redis.hset(`omnimind:job:${jobKey}`, 'status', 'PROCESSING');
+    await redis.hset(`aether:job:${jobKey}`, 'status', 'PROCESSING');
 
     const apiUrl = `http://localhost:${config.port}`;
 
@@ -115,12 +115,12 @@ async function processClipJob(redis: Redis, jobKey: string) {
       throw new Error(`Clip generation failed: ${errText}`);
     }
 
-    await redis.hset(`omnimind:job:${jobKey}`, 'status', 'COMPLETED');
+    await redis.hset(`aether:job:${jobKey}`, 'status', 'COMPLETED');
     logger.info({ jobId: jobKey }, 'Clip job completed');
   } catch (err) {
     logger.error({ jobId: jobKey, err }, 'Clip job failed');
-    await redis.hset(`omnimind:job:${jobKey}`, 'status', 'FAILED');
-    await redis.hset(`omnimind:job:${jobKey}`, 'error', (err as Error).message);
+    await redis.hset(`aether:job:${jobKey}`, 'status', 'FAILED');
+    await redis.hset(`aether:job:${jobKey}`, 'error', (err as Error).message);
   }
 }
 

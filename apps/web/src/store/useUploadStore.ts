@@ -148,7 +148,7 @@ export const useUploadStore = create<UploadState>()(
       clearError: () => set({ error: null }),
     }),
     {
-      name: "omnimind-files",
+      name: "aether-files",
       partialize: (state) => ({ uploadedFiles: state.uploadedFiles }),
       onRehydrateStorage: () => (state) => {
         if (state) {

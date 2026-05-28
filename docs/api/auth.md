@@ -7,7 +7,7 @@ The Authentication API provides endpoints for user registration, login, and sess
 ## Base URL
 
 ```
-https://api.omnimind.ai/api/v1/auth
+https://api.aether.app/api/v1/auth
 ```
 
 ## Endpoints

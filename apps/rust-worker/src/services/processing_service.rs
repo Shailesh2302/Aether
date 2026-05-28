@@ -49,7 +49,7 @@ impl ProcessingService {
             job_type: "ClipGenerate".to_string(),
             video_id: video_id.to_string(),
             input_path: String::new(),
-            output_path: Some(format!("/tmp/omnimind/clips/{}.mp4", clip_id)),
+            output_path: Some(format!("/tmp/aether/clips/{}.mp4", clip_id)),
             status: "pending".to_string(),
             parameters: Some(JobParameters {
                 start_time: Some(start_time),
@@ -62,7 +62,7 @@ impl ProcessingService {
             }),
         };
 
-        let queue = JobQueue::with_queue(self.app_state.redis.clone(), "omnimind:clip:queue");
+        let queue = JobQueue::with_queue(self.app_state.redis.clone(), "aether:clip:queue");
         queue.push(job).await?;
 
         info!("Queued clip generation: {} for video: {}", clip_id, video_id);

@@ -2,12 +2,12 @@
 
 import { useRef, useEffect, useState } from "react";
 import { useChat } from "@/hooks/useChat";
-import { ChatMessageComponent } from "./ChatMessage";
+import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Loader2, MessageSquare, RefreshCw } from "lucide-react";
 
 export function ChatInterface() {
-  const { messages, isLoading, isStreaming, error, sendMessage, clearMessages } = useChat();
+  const { messages, isLoading, error, sendMessage, clearMessages } = useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showError, setShowError] = useState(false);
 
@@ -15,7 +15,7 @@ export function ChatInterface() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isStreaming]);
+  }, [messages]);
 
   useEffect(() => {
     if (error) {
@@ -70,11 +70,11 @@ export function ChatInterface() {
           </div>
         ) : (
           messages.map((message) => (
-            <ChatMessageComponent key={message.id} message={message} />
+            <ChatMessage key={message.id} message={message} />
           ))
         )}
         
-        {(isLoading || isStreaming) && (
+        {isLoading && (
           <div className="flex gap-3">
             <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -92,7 +92,7 @@ export function ChatInterface() {
       <div className="p-4 border-t">
         <ChatInput 
           onSend={sendMessage} 
-          disabled={isLoading || isStreaming} 
+          disabled={isLoading} 
           placeholder="Ask about this video..."
         />
       </div>

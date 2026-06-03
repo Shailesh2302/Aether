@@ -1,10 +1,10 @@
 import { cn, formatDuration, formatFileSize } from "@/lib/utils";
 import { Play, MoreVertical, Download, Trash2, Scissors, Loader2, CheckCircle, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { File } from "@/lib/api";
+import type { FileItem } from "@/lib/api";
 
 interface VideoThumbnailProps {
-  file: File;
+  file: FileItem;
   onPlay?: () => void;
   onDelete?: () => void;
   onCreateClip?: () => void;

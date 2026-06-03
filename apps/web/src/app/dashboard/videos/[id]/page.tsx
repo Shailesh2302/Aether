@@ -35,7 +35,7 @@ export default function VideoDetailPage() {
   const searchParams = useSearchParams();
   const fileId = params.id as string;
   const seekTime = searchParams.get("t");
-  const { uploadedFiles } = useUpload();
+  const { files: uploadedFiles } = useUpload();
   
   const { currentTime, setCurrentTime } = useVideoChat();
   

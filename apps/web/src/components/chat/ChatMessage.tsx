@@ -14,7 +14,7 @@ interface ChatMessageProps {
   onTimestampClick?: (timestamp: number) => void;
 }
 
-export function ChatMessageComponent({ message, sources = [], onTimestampClick }: ChatMessageProps) {
+export function ChatMessage({ message, sources = [], onTimestampClick }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === "user";
 
@@ -102,7 +102,7 @@ export function ChatMessageComponent({ message, sources = [], onTimestampClick }
         )}>
           <div className="flex items-center gap-1 text-xs">
             <Clock className="h-3 w-3" />
-            <span>{new Date(message.createdAt).toLocaleTimeString()}</span>
+            <span>{message.createdAt ? new Date(message.createdAt).toLocaleTimeString() : ""}</span>
           </div>
           
           {!isUser && (

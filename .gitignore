@@ -60,9 +60,22 @@ storage/clips/*
 storage/thumbnails/*
 storage/temp/*
 !storage/.gitkeep
+apps/api/storage/
 
 # Rust
-rust-analyzer/apps/api/storage/uploads/
-apps/api/storage/uploads/
-apps/api/storage/uploads/
+rust-analyzer/
 *.mp4
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

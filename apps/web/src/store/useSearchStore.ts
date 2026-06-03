@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { searchApi, type SearchResult } from "@/lib/api";
+import { searchApi, type SearchResult, extractErrorMessage } from "@/lib/api";
 
 interface SearchState {
   query: string;
@@ -17,27 +17,23 @@ export const useSearchStore = create<SearchState>((set) => ({
   isLoading: false,
   error: null,
 
-  search: async (query: string) => {
+  search: async (query) => {
     if (!query.trim()) {
       set({ results: [], query: "" });
       return;
     }
-
     set({ isLoading: true, error: null, query });
-
     try {
-      const data = await searchApi.search(query);
-      const results = Array.isArray(data) ? data : (data.results ?? []);
+      const results = await searchApi.search(query);
       set({ results, isLoading: false });
-    } catch (error: any) {
+    } catch (error) {
       set({
-        error: error.response?.data?.message || "Search failed",
+        error: extractErrorMessage(error, "Search failed"),
         isLoading: false,
       });
     }
   },
 
-  setQuery: (query: string) => set({ query }),
-
-  clearResults: () => set({ results: [], query: "" }),
+  setQuery: (query) => set({ query }),
+  clearResults: () => set({ results: [], query: "", error: null }),
 }));

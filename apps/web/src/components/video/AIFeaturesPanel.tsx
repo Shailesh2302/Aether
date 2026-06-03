@@ -94,7 +94,12 @@ export function AIFeaturesPanel({
       return;
     }
     try {
-      await clipsApi.create(fileId, startSec, endSec, `Clip ${formatTime(startSec)} - ${formatTime(endSec)}`);
+      await clipsApi.create({
+        fileId,
+        startTime: startSec,
+        endTime: endSec,
+        title: `Clip ${formatTime(startSec)} - ${formatTime(endSec)}`,
+      });
     } catch (err) {
       console.error("Failed to create clip:", err);
     }

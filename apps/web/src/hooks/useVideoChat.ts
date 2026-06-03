@@ -8,13 +8,12 @@ export function useVideoChat() {
     transcript,
     currentTime,
     isLoading,
-    isProcessing,
     error,
     sendMessage,
     setCurrentTime,
-    clearChat,
     setTranscript,
     setFileId,
+    clearChat,
   } = useVideoChatStore();
 
   return {
@@ -24,12 +23,11 @@ export function useVideoChat() {
     transcript,
     currentTime,
     isLoading,
-    isProcessing,
     error,
     sendMessage,
     setCurrentTime,
-    clearChat,
     setTranscript,
     setFileId,
+    clearChat,
   };
 }

@@ -3,19 +3,21 @@ import { useChatStore } from "@/store/useChatStore";
 export function useChat() {
   const {
     messages,
+    sources,
     isLoading,
-    isStreaming,
     error,
     sendMessage,
     clearMessages,
+    clearError,
   } = useChatStore();
 
   return {
     messages,
+    sources,
     isLoading,
-    isStreaming,
     error,
     sendMessage,
     clearMessages,
+    clearError,
   };
 }

@@ -3,13 +3,14 @@ import { useUploadStore } from "@/store/useUploadStore";
 
 export function useUpload() {
   const {
+    uploads,
     files,
-    uploadedFiles,
     isLoading,
+    isFetching,
     error,
     uploadFile,
-    removeFile,
-    deleteUploadedFile,
+    removeUpload,
+    clearUploads,
     fetchFiles,
     deleteFile,
     clearError,
@@ -18,7 +19,6 @@ export function useUpload() {
   const handleUpload = useCallback(
     async (fileList: FileList | null) => {
       if (!fileList) return;
-
       for (let i = 0; i < fileList.length; i++) {
         await uploadFile(fileList[i]);
       }
@@ -27,13 +27,15 @@ export function useUpload() {
   );
 
   return {
+    uploads,
     files,
-    uploadedFiles,
     isLoading,
+    isFetching,
     error,
+    uploadFile,
     handleUpload,
-    removeFile,
-    deleteUploadedFile,
+    removeUpload,
+    clearUploads,
     fetchFiles,
     deleteFile,
     clearError,

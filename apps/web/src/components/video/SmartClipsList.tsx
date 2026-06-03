@@ -27,7 +27,7 @@ export function SmartClipsList({
     try {
       setLoading(true);
       const data = await clipsApi.list(fileId);
-      setClips(data.clips || data || []);
+      setClips(data || []);
     } catch (error) {
       console.error("Failed to load clips:", error);
     } finally {

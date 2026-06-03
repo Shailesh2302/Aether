@@ -1,13 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { api } from "@/lib/api";
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  avatar?: string;
-}
+import { authApi, setToken, clearToken, getToken, type User } from "@/lib/api";
 
 interface AuthState {
   user: User | null;
@@ -18,6 +11,8 @@ interface AuthState {
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  setUser: (user: User | null) => void;
+  clearError: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -28,63 +23,78 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       error: null,
 
-      login: async (email: string, password: string) => {
+      login: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
-          const { data } = await api.post("/auth/login", { email, password });
-          localStorage.setItem("token", data.token);
-          set({ user: data.user, isAuthenticated: true, isLoading: false });
-        } catch (error: any) {
-          set({ error: error.response?.data?.error || error.message || "Login failed", isLoading: false });
+          const data = await authApi.login(email, password);
+          set({
+            user: data.user,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+        } catch (error: unknown) {
+          const message =
+            (error as { response?: { data?: { error?: string } } })?.response
+              ?.data?.error ||
+            (error as { message?: string })?.message ||
+            "Login failed";
+          set({ error: message, isLoading: false });
           throw error;
         }
       },
 
-      register: async (email: string, password: string, name: string) => {
+      register: async (email, password, name) => {
         set({ isLoading: true, error: null });
         try {
-          const { data } = await api.post("/auth/register", { email, password, name });
-          localStorage.setItem("token", data.token);
-          set({ user: data.user, isAuthenticated: true, isLoading: false });
-        } catch (error: any) {
-          set({ error: error.response?.data?.error || error.message || "Registration failed", isLoading: false });
+          const data = await authApi.register(email, password, name);
+          set({
+            user: data.user,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+        } catch (error: unknown) {
+          const message =
+            (error as { response?: { data?: { error?: string } } })?.response
+              ?.data?.error ||
+            (error as { message?: string })?.message ||
+            "Registration failed";
+          set({ error: message, isLoading: false });
           throw error;
         }
       },
 
       logout: async () => {
-        localStorage.removeItem("token");
-        set({ user: null, isAuthenticated: false, isLoading: false });
+        try {
+          await authApi.logout();
+        } finally {
+          clearToken();
+          set({ user: null, isAuthenticated: false });
+        }
       },
 
       checkAuth: async () => {
-        const token = localStorage.getItem("token");
-        
-        // If no token, not authenticated
-        if (!token) {
-          set({ isLoading: false, isAuthenticated: false });
+        if (!getToken()) {
+          set({ isLoading: false, isAuthenticated: false, user: null });
           return;
         }
-        
-        // Token exists - user is authenticated
-        // Try to get user data, but don't logout if it fails
         set({ isLoading: true, isAuthenticated: true });
-        
         try {
-          const { data: user } = await api.get("/auth/me");
-          set({ user, isAuthenticated: true, isLoading: false });
-        } catch (error) {
-          // Token might be expired but we'll keep user logged in
-          // The API interceptor will handle token refresh or logout when needed
-          console.log("Auth check failed but keeping user logged in:", error);
-          // Keep isAuthenticated: true, just don't set user
-          set({ isLoading: false });
+          const user = await authApi.me();
+          set({ user, isLoading: false });
+        } catch {
+          set({ user: null, isLoading: false });
         }
       },
+
+      setUser: (user) => set({ user, isAuthenticated: !!user }),
+      clearError: () => set({ error: null }),
     }),
     {
       name: "aether-auth",
-      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+      }),
     }
   )
 );

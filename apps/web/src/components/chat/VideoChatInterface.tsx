@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { useVideoChat } from "@/hooks/useVideoChat";
-import { ChatMessageComponent } from "./ChatMessage";
+import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Loader2, MessageSquare, RefreshCw } from "lucide-react";
 
@@ -12,7 +12,7 @@ interface VideoChatInterfaceProps {
 }
 
 export function VideoChatInterface({ fileId, onTimestampClick }: VideoChatInterfaceProps) {
-  const { messages, sources, isLoading, isProcessing, error, sendMessage, clearChat, setFileId } = useVideoChat();
+  const { messages, sources, isLoading, error, sendMessage, clearChat, setFileId } = useVideoChat();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showError, setShowError] = useState(false);
 
@@ -24,7 +24,7 @@ export function VideoChatInterface({ fileId, onTimestampClick }: VideoChatInterf
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isProcessing]);
+  }, [messages]);
 
   useEffect(() => {
     if (error) {
@@ -84,7 +84,7 @@ export function VideoChatInterface({ fileId, onTimestampClick }: VideoChatInterf
           </div>
         ) : (
           messages.map((message) => (
-            <ChatMessageComponent
+            <ChatMessage
               key={message.id}
               message={message}
               sources={message.role === "assistant" ? sources : []}
@@ -93,7 +93,7 @@ export function VideoChatInterface({ fileId, onTimestampClick }: VideoChatInterf
           ))
         )}
         
-        {(isLoading || isProcessing) && (
+        {isLoading && (
           <div className="flex gap-3">
             <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -111,7 +111,7 @@ export function VideoChatInterface({ fileId, onTimestampClick }: VideoChatInterf
       <div className="p-4 border-t">
         <ChatInput 
           onSend={handleSend} 
-          disabled={isLoading || isProcessing} 
+          disabled={isLoading} 
           placeholder="Ask about this video..."
         />
       </div>

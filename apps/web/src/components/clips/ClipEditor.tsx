@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Play, Check, X, Loader2 } from "lucide-react";
-import type { File } from "@/lib/api";
+import type { FileItem } from "@/lib/api";
 import { ClipTimeline } from "@/components/video/ClipTimeline";
 import { toast } from "@/hooks/use-toast";
 
 interface ClipEditorProps {
-  file: File;
+  file: FileItem;
   onSave: (startTime: number, endTime: number, name: string) => void;
   onCancel: () => void;
 }
@@ -33,7 +33,12 @@ export function ClipEditor({ file, onSave, onCancel }: ClipEditorProps) {
     setIsSaving(true);
     try {
       const { clipsApi } = await import("@/lib/api");
-      await clipsApi.generate(file.id, startTime, endTime, name.trim());
+      await clipsApi.generate({
+        fileId: file.id,
+        startTime,
+        endTime,
+        title: name.trim(),
+      });
       toast({
         title: "Clip generated",
         description: "Your clip is being processed and will be available shortly.",

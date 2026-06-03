@@ -1,0 +1,94 @@
+services:
+  - type: web
+    name: aether-api
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: POSTGRES_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_HOST
+        sync: false
+      - key: REDIS_PORT
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: QDRANT_HOST
+        sync: false
+      - key: QDRANT_PORT
+        value: 6333
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: AI_SERVICE_URL
+        value: https://aether-ai.onrender.com
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRY
+        value: 7d
+      - key: STORAGE_TYPE
+        value: cloudinary
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_UPLOAD_PRESET
+        value: aether
+      - key: CORS_ORIGIN
+        value: https://aether-web.vercel.app
+      - key: LOG_LEVEL
+        value: info
+
+  - type: web
+    name: aether-ai
+    runtime: docker
+    rootDir: apps/ai-service
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: QDRANT_HOST
+        sync: false
+      - key: QDRANT_PORT
+        value: 6333
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: WHISPER_MODEL
+        value: tiny
+      - key: WHISPER_DEVICE
+        value: cpu
+      - key: SENTENCE_TRANSFORMER_MODEL
+        value: sentence-transformers/all-MiniLM-L6-v2
+
+  - type: worker
+    name: aether-worker
+    runtime: docker
+    rootDir: apps/rust-worker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    autoDeploy: true
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: STORAGE_PATH
+        value: /tmp/aether
+      - key: RUST_LOG
+        value: info

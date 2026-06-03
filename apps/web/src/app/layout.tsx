@@ -6,11 +6,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Providers } from "./providers";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Aether - AI-Powered Content Platform",
-  description: "Upload, manage, and search your content with AI-powered semantic search",
+  title: "Aether — AI-powered content platform",
+  description:
+    "Upload, search, and interact with your files using natural language AI.",
 };
 
 export default function RootLayout({
@@ -19,11 +20,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={inter.variable}>
       <body className={inter.className}>
         <Providers>
-          <TooltipProvider>
-            <div className="min-h-screen flex flex-col">
+          <TooltipProvider delayDuration={150}>
+            <div className="flex min-h-screen flex-col">
               <Header />
               <main className="flex-1">{children}</main>
             </div>

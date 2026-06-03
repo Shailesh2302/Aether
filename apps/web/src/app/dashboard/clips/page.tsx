@@ -1,204 +1,322 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { clipsApi, type Clip, type FileItem } from "@/lib/api";
 import { useUpload } from "@/hooks/useUpload";
-import { ClipsList } from "@/components/clips/ClipsList";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Scissors,
+  Play,
+  Trash2,
+  Plus,
+  Video as VideoIcon,
+  Clock,
+  Loader2,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ClipEditor } from "@/components/clips/ClipEditor";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Scissors, Loader2 } from "lucide-react";
-import { clipsApi, type Clip, type File } from "@/lib/api";
+import { formatDuration, formatDate, getFileCategory, getStatusColor, getStatusLabel } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 export default function ClipsPage() {
-  const { uploadedFiles } = useUpload();
+  const { files, fetchFiles } = useUpload();
   const [clips, setClips] = useState<Clip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [playingClip, setPlayingClip] = useState<Clip | null>(null);
+  const [fileFilter, setFileFilter] = useState<string>("all");
 
-  const allFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
-  const videos = allFiles.filter((f) => f.type?.startsWith("video"));
+  const fileList = useMemo(() => (Array.isArray(files) ? files : []), [files]);
+  const videos = useMemo(
+    () => fileList.filter((f) => getFileCategory(f.mimeType) === "video"),
+    [fileList]
+  );
 
-  const fetchClips = useCallback(async () => {
+  const fetchClips = async () => {
     try {
       setIsLoading(true);
-      const data = await clipsApi.list();
-      const fetchedClips = Array.isArray(data) ? data : (data.clips ?? []);
-      setClips(fetchedClips);
-    } catch (error) {
-      console.error("Failed to fetch clips:", error);
+      const list = await clipsApi.list();
+      setClips(list);
+    } catch (err) {
+      console.error(err);
       toast({
-        title: "Error",
-        description: "Failed to load clips. Please try again.",
+        title: "Failed to load clips",
+        description: "Please try again",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     fetchClips();
-  }, [fetchClips]);
+    fetchFiles();
+  }, [fetchFiles]);
 
-  const handleCreateClip = (file: File) => {
-    setSelectedFile(file);
+  const handleDelete = async (clip: Clip) => {
+    if (!confirm(`Delete clip "${clip.title}"?`)) return;
+    try {
+      await clipsApi.delete(clip.id);
+      setClips((prev) => prev.filter((c) => c.id !== clip.id));
+      toast({ title: "Clip deleted" });
+    } catch {
+      setClips((prev) => prev.filter((c) => c.id !== clip.id));
+      toast({ title: "Removed locally" });
+    }
   };
 
-  const handleClipSaved = async (startTime: number, endTime: number, name: string) => {
-    if (!selectedFile) return;
-    
-    try {
-      await clipsApi.create(selectedFile.id, startTime, endTime, name.trim());
-      await fetchClips();
-      
-      toast({
-        title: "Clip created",
-        description: `"${name}" has been saved successfully.`,
-      });
-    } catch (error) {
-      const newClip: Clip = {
-        id: `local-${Date.now()}`,
-        title: name,
-        startTime,
-        endTime,
-        fileId: selectedFile.id,
-        createdAt: new Date().toISOString(),
-      };
-      setClips([...clips, newClip]);
-      
-      toast({
-        title: "Clip saved locally",
-        description: `"${name}" has been saved (API unavailable).`,
-      });
-    }
-    
+  const handleClipSaved = async () => {
     setSelectedFile(null);
+    await fetchClips();
   };
 
-  const handleDeleteClip = async (clip: Clip) => {
-    if (!confirm("Delete this clip?")) return;
-    
-    try {
-      if (!clip.id.startsWith("local-")) {
-        await clipsApi.delete(clip.id);
-      }
-      setClips(clips.filter((c) => c.id !== clip.id));
-      toast({
-        title: "Clip deleted",
-        description: "The clip has been removed.",
-      });
-    } catch (error) {
-      setClips(clips.filter((c) => c.id !== clip.id));
-      toast({
-        title: "Clip removed",
-        description: "The clip has been removed (local).",
-      });
-    }
-  };
+  const filteredClips = useMemo(() => {
+    if (fileFilter === "all") return clips;
+    return clips.filter((c) => c.fileId === fileFilter);
+  }, [clips, fileFilter]);
+
+  const playingFile = useMemo(() => {
+    if (!playingClip?.fileId) return null;
+    return fileList.find((f) => f.id === playingClip.fileId) ?? null;
+  }, [playingClip, fileList]);
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Clips</h1>
-          <p className="text-muted-foreground">
-            Create and manage video clips
+          <h1 className="text-2xl font-semibold tracking-tight">Clips</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Create and manage short clips from your videos
           </p>
         </div>
-        <Button variant="outline" onClick={fetchClips} disabled={isLoading}>
-          {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-          Refresh
-        </Button>
       </div>
 
-      {videos.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-            <Scissors className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold mb-2">No videos available</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Upload some videos first to create clips
-          </p>
-        </div>
-      ) : (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Create New Clip</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {videos.map((video) => (
-                  <div
-                    key={video.id}
-                    className="p-4 rounded-lg border bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                    onClick={() => handleCreateClip(video)}
-                  >
-                    <div className="aspect-video bg-background rounded mb-2 flex items-center justify-center">
-                      <Scissors className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                    <p className="text-sm font-medium truncate">{video.name}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Clips</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <ClipsList
-                  clips={clips}
-                  onPlay={(clip) => setPlayingClip(clip)}
-                  onDelete={handleDeleteClip}
-                  onDownload={(clip) => {
-                    toast({
-                      title: "Download",
-                      description: "Download functionality coming soon.",
-                    });
-                  }}
-                />
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
-
-      <Dialog open={!!selectedFile} onOpenChange={() => setSelectedFile(null)}>
-        <DialogContent className="max-w-2xl">
-          {selectedFile && (
-            <div onClick={(e) => e.stopPropagation()}>
-              <ClipEditor
-                file={selectedFile}
-                onSave={handleClipSaved}
-                onCancel={() => setSelectedFile(null)}
-              />
+      {/* Source videos */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Create a new clip</CardTitle>
+          <CardDescription>Pick a source video to start clipping</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {videos.length === 0 ? (
+            <div className="py-8 text-center">
+              <VideoIcon className="mx-auto h-8 w-8 text-muted-foreground/50" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                You don&apos;t have any videos yet
+              </p>
+              <Button asChild size="sm" className="mt-3">
+                <Link href="/upload">Upload a video</Link>
+              </Button>
             </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {videos.map((video) => (
+                <button
+                  key={video.id}
+                  onClick={() => setSelectedFile(video)}
+                  className="group flex flex-col items-stretch overflow-hidden rounded-md border bg-card text-left transition-colors hover:border-primary/40"
+                >
+                  <div className="relative aspect-video bg-muted">
+                    {video.thumbnailUrl ? (
+                      <img
+                        src={video.thumbnailUrl}
+                        alt={video.originalName}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <VideoIcon className="h-8 w-8 text-muted-foreground/50" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30">
+                      <Plus className="h-8 w-8 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+                    </div>
+                    {video.duration && (
+                      <div className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white font-mono">
+                        {formatDuration(video.duration)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-2.5">
+                    <p className="truncate text-xs font-medium">
+                      {video.originalName}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Existing clips */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Your clips</CardTitle>
+            <CardDescription>
+              {clips.length} clip{clips.length === 1 ? "" : "s"} total
+            </CardDescription>
+          </div>
+          {clips.length > 0 && (
+            <Select value={fileFilter} onValueChange={setFileFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All videos</SelectItem>
+                {videos.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.originalName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Spinner size="lg" />
+            </div>
+          ) : filteredClips.length === 0 ? (
+            <div className="py-10 text-center">
+              <Scissors className="mx-auto h-8 w-8 text-muted-foreground/50" />
+              <p className="mt-2 text-sm font-medium">No clips yet</p>
+              <p className="text-xs text-muted-foreground">
+                Create your first clip from a video above.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {filteredClips.map((clip) => {
+                const source = fileList.find((f) => f.id === clip.fileId);
+                return (
+                  <div
+                    key={clip.id}
+                    className="flex items-center gap-3 py-3"
+                  >
+                    <button
+                      onClick={() => setPlayingClip(clip)}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors hover:bg-primary/20"
+                      aria-label="Play clip"
+                    >
+                      <Play className="h-4 w-4 fill-current ml-0.5" />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {clip.title}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 font-mono">
+                          <Clock className="h-3 w-3" />
+                          {formatDuration(clip.startTime)} –{" "}
+                          {formatDuration(clip.endTime)}
+                        </span>
+                        <span>·</span>
+                        <span>
+                          {formatDuration(clip.endTime - clip.startTime)}{" "}
+                          duration
+                        </span>
+                        {source && (
+                          <>
+                            <span>·</span>
+                            <span className="truncate max-w-[12rem]">
+                              {source.originalName}
+                            </span>
+                          </>
+                        )}
+                        <span>·</span>
+                        <span>{formatDate(clip.createdAt)}</span>
+                      </div>
+                    </div>
+                    <Badge variant={getStatusColor(clip.status)}>
+                      {getStatusLabel(clip.status)}
+                    </Badge>
+                    <button
+                      onClick={() => handleDelete(clip)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      aria-label="Delete clip"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Editor dialog */}
+      <Dialog
+        open={!!selectedFile}
+        onOpenChange={(open) => !open && setSelectedFile(null)}
+      >
+        <DialogContent className="max-w-3xl p-0">
+          {selectedFile && (
+            <ClipEditor
+              file={selectedFile}
+              onSave={handleClipSaved}
+              onCancel={() => setSelectedFile(null)}
+            />
           )}
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!playingClip} onOpenChange={() => setPlayingClip(null)}>
-        <DialogContent className="max-w-4xl">
+      {/* Player dialog */}
+      <Dialog
+        open={!!playingClip}
+        onOpenChange={(open) => !open && setPlayingClip(null)}
+      >
+        <DialogContent className="max-w-4xl p-0 overflow-hidden">
           {playingClip && (
-            <div className="space-y-4">
-              <h3 className="font-semibold">{playingClip.title}</h3>
-              <VideoPlayer
-                src={allFiles.find((f) => f.id === playingClip.fileId)?.url || ""}
-                initialTime={playingClip.startTime}
-              />
+            <div>
+              <DialogHeader className="px-6 pt-6 pb-2">
+                <DialogTitle className="truncate">
+                  {playingClip.title}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="px-6 pb-6">
+                {playingFile?.url ? (
+                  <VideoPlayer
+                    src={playingFile.url}
+                    initialTime={playingClip.startTime}
+                    className="w-full"
+                  />
+                ) : (
+                  <div className="aspect-video bg-muted flex items-center justify-center rounded-md">
+                    <div className="text-center text-sm text-muted-foreground">
+                      <Loader2 className="mx-auto h-6 w-6 animate-spin" />
+                      <p className="mt-2">Source video unavailable</p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
-  FileUp,
+  Upload,
   Search,
   FolderOpen,
   Video,
@@ -13,11 +13,18 @@ import {
   Scissors,
   Settings,
   Sparkles,
+  type LucideIcon,
 } from "lucide-react";
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/upload", label: "Upload", icon: FileUp },
+  { href: "/upload", label: "Upload", icon: Upload },
   { href: "/search", label: "Search", icon: Search },
   { href: "/dashboard/files", label: "Files", icon: FolderOpen },
   { href: "/dashboard/videos", label: "Videos", icon: Video },
@@ -30,44 +37,41 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden lg:flex w-64 flex-col border-r bg-card">
-      <div className="p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center">
-            <Sparkles className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-lg font-bold">Aether</span>
-        </div>
-        
-        <nav className="space-y-1">
+    <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r bg-card">
+      <div className="flex-1 overflow-y-auto p-4">
+        <nav className="space-y-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || 
-              (item.href !== "/dashboard" && pathname.startsWith(item.href));
-            
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/dashboard" &&
+                pathname.startsWith(item.href + "/"));
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                 )}
               >
                 <Icon className="h-4 w-4" />
-                {item.label}
+                <span>{item.label}</span>
               </Link>
             );
           })}
         </nav>
       </div>
 
-      <div className="mt-auto p-6">
-        <div className="rounded-lg bg-muted p-4">
-          <h4 className="text-sm font-semibold mb-1">Pro Tips</h4>
-          <p className="text-xs text-muted-foreground">
+      <div className="border-t p-4">
+        <div className="rounded-md border bg-muted/50 p-3">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <h4 className="text-xs font-semibold">AI Tip</h4>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
             Use semantic search to find content across all your files instantly.
           </p>
         </div>

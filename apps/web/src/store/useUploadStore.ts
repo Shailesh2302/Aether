@@ -1,10 +1,9 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { filesApi, type File as ApiFile } from "@/lib/api";
+import { filesApi, type FileItem, extractErrorMessage } from "@/lib/api";
 
-interface UploadFile {
+export interface UploadItem {
   id: string;
-  file: globalThis.File;
+  file: File;
   progress: number;
   status: "pending" | "uploading" | "success" | "error";
   error?: string;
@@ -12,149 +11,133 @@ interface UploadFile {
 }
 
 interface UploadState {
-  files: UploadFile[];
-  uploadedFiles: ApiFile[];
+  uploads: UploadItem[];
+  files: FileItem[];
   isLoading: boolean;
+  isFetching: boolean;
   error: string | null;
-  uploadFile: (file: globalThis.File) => Promise<void>;
-  removeFile: (id: string) => void;
-  deleteUploadedFile: (id: string) => void;
+  uploadFile: (file: File) => Promise<FileItem | null>;
+  removeUpload: (id: string) => void;
+  clearUploads: () => void;
   fetchFiles: () => Promise<void>;
   deleteFile: (id: string) => Promise<void>;
+  addLocalFile: (file: FileItem) => void;
   clearError: () => void;
-  addLocalFile: (file: ApiFile) => void;
 }
 
-function safeFiles(arr: unknown): ApiFile[] {
-  return Array.isArray(arr) ? arr.filter((f): f is ApiFile => f && typeof f === 'object' && 'id' in f) : [];
-}
+export const useUploadStore = create<UploadState>((set, get) => ({
+  uploads: [],
+  files: [],
+  isLoading: false,
+  isFetching: false,
+  error: null,
 
-export const useUploadStore = create<UploadState>()(
-  persist(
-    (set) => ({
-      files: [],
-      uploadedFiles: [],
-      isLoading: false,
-      error: null,
+  uploadFile: async (file) => {
+    const tempId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const previewUrl =
+      file.type.startsWith("image/") || file.type.startsWith("video/")
+        ? URL.createObjectURL(file)
+        : undefined;
 
-      uploadFile: async (file: globalThis.File) => {
-        const tempId = Math.random().toString(36).substring(7);
-        const previewUrl = URL.createObjectURL(file);
+    set((state) => ({
+      uploads: [
+        ...state.uploads,
+        {
+          id: tempId,
+          file,
+          progress: 0,
+          status: "uploading",
+          previewUrl,
+        },
+      ],
+      isLoading: true,
+    }));
 
+    try {
+      const uploaded = await filesApi.upload(file, (progress) => {
         set((state) => ({
-          files: [...state.files, { id: tempId, file, progress: 0, status: "pending", previewUrl }],
+          uploads: state.uploads.map((u) =>
+            u.id === tempId ? { ...u, progress } : u
+          ),
         }));
+      });
 
-        try {
-          set((state) => ({
-            files: state.files.map((f) =>
-              f.id === tempId ? { ...f, status: "uploading" } : f
-            ),
-          }));
+      set((state) => ({
+        uploads: state.uploads.map((u) =>
+          u.id === tempId
+            ? { ...u, status: "success", progress: 100 }
+            : u
+        ),
+        files: [uploaded, ...state.files],
+        isLoading: false,
+      }));
 
-          for (let i = 0; i <= 90; i += 10) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-            set((state) => ({
-              files: state.files.map((f) =>
-                f.id === tempId ? { ...f, progress: i } : f
-              ),
-            }));
-          }
-
-          try {
-            const uploaded = await filesApi.upload(file, (progress) => {
-              set((state) => ({
-                files: state.files.map((f) =>
-                  f.id === tempId ? { ...f, progress } : f
-                ),
-              }));
-            });
-
-            set((state) => ({
-              files: state.files.filter((f) => f.id !== tempId),
-              uploadedFiles: [...state.uploadedFiles, uploaded],
-            }));
-          } catch {
-            const localFile: ApiFile = {
-              id: `local-${Date.now()}`,
-              name: file.name,
-              type: file.type,
-              size: file.size,
-              url: previewUrl,
-              userId: "",
-              createdAt: new Date().toISOString(),
-            };
-
-            set((state) => ({
-              files: state.files.filter((f) => f.id !== tempId),
-              uploadedFiles: [...state.uploadedFiles, localFile],
-            }));
-          }
-        } catch (error: any) {
-          set((state) => ({
-            files: state.files.map((f) =>
-              f.id === tempId ? { ...f, status: "error", error: error.message } : f
-            ),
-          }));
-        }
-      },
-
-      addLocalFile: (file: ApiFile) => {
-        set((state) => ({
-          uploadedFiles: [...state.uploadedFiles, file],
-        }));
-      },
-
-      removeFile: (id: string) => {
-        set((state) => ({
-          files: state.files.filter((f) => f.id !== id),
-        }));
-      },
-
-      deleteUploadedFile: (id: string) => {
-        set((state) => ({
-          uploadedFiles: state.uploadedFiles.filter((f) => f.id !== id),
-        }));
-      },
-
-      fetchFiles: async () => {
-        set({ isLoading: true, error: null });
-        try {
-          const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-          if (!token) {
-            console.log("No token found in localStorage");
-            set({ isLoading: false });
-            return;
-          }
-          const files = await filesApi.list();
-          console.log("Fetched files:", files);
-          set({ uploadedFiles: files, isLoading: false });
-        } catch (error: any) {
-          console.error("Failed to fetch files:", error);
-          set({ isLoading: false, error: error.message });
-        }
-      },
-
-      deleteFile: async (id: string) => {
-        try {
-          await filesApi.delete(id);
-        } catch {
-        }
-        set((state) => ({
-          uploadedFiles: state.uploadedFiles.filter((f) => f.id !== id),
-        }));
-      },
-
-      clearError: () => set({ error: null }),
-    }),
-    {
-      name: "aether-files",
-      partialize: (state) => ({ uploadedFiles: state.uploadedFiles }),
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          state.uploadedFiles = safeFiles(state.uploadedFiles);
-        }
-      },
+      return uploaded;
+    } catch (error) {
+      const message = extractErrorMessage(error, "Upload failed");
+      set((state) => ({
+        uploads: state.uploads.map((u) =>
+          u.id === tempId
+            ? { ...u, status: "error", error: message }
+            : u
+        ),
+        isLoading: false,
+        error: message,
+      }));
+      return null;
     }
-  )
-);
+  },
+
+  removeUpload: (id) => {
+    set((state) => {
+      const upload = state.uploads.find((u) => u.id === id);
+      if (upload?.previewUrl) URL.revokeObjectURL(upload.previewUrl);
+      return {
+        uploads: state.uploads.filter((u) => u.id !== id),
+      };
+    });
+  },
+
+  clearUploads: () => {
+    set((state) => {
+      state.uploads.forEach((u) => {
+        if (u.previewUrl) URL.revokeObjectURL(u.previewUrl);
+      });
+      return { uploads: [] };
+    });
+  },
+
+  fetchFiles: async () => {
+    set({ isFetching: true, error: null });
+    try {
+      const files = await filesApi.list();
+      set({ files, isFetching: false });
+    } catch (error) {
+      set({
+        error: extractErrorMessage(error, "Failed to load files"),
+        isFetching: false,
+      });
+    }
+  },
+
+  deleteFile: async (id) => {
+    try {
+      await filesApi.delete(id);
+      set((state) => ({
+        files: state.files.filter((f) => f.id !== id),
+      }));
+    } catch (error) {
+      set({ error: extractErrorMessage(error, "Failed to delete file") });
+      // Remove from local list anyway
+      set((state) => ({
+        files: state.files.filter((f) => f.id !== id),
+      }));
+    }
+  },
+
+  addLocalFile: (file) => {
+    set((state) => ({ files: [file, ...state.files] }));
+  },
+
+  clearError: () => set({ error: null }),
+}));

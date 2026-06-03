@@ -22,6 +22,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 
+# Prisma's query engine needs OpenSSL to make TLS connections to managed
+# Postgres (Neon, RDS, Supabase, etc.). node:20-alpine does not include it,
+# which causes `prisma migrate deploy` to fail with
+# `Could not parse schema engine response: "Error load"`.
+RUN apk add --no-cache openssl
+
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json

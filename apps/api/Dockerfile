@@ -7,15 +7,14 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/
-COPY packages ./packages
-RUN pnpm install --filter @aether/api... --frozen-lockfile
+RUN pnpm install --filter api... --frozen-lockfile
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY apps/api ./apps/api
 WORKDIR /app/apps/api
-RUN pnpm db:generate || true
+RUN pnpm db:generate
 RUN pnpm build
 
 FROM node:20-alpine AS runner

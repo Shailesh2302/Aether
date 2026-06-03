@@ -39,4 +39,9 @@ COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 WORKDIR /app/apps/api
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+# Start command handles Prisma's P3005 ("schema is not empty") error so
+# the first deploy against a DB that already has the schema (e.g. from a
+# prior `prisma db push` or partial migration) can baseline itself and
+# proceed. On any other migration error we fail fast so the deploy
+# surfaces the real problem.
+CMD ["bash", "-c", "npx prisma migrate deploy 2>&1 | tee /tmp/migrate.log; if [ ${PIPESTATUS[0]} -ne 0 ]; then if grep -q P3005 /tmp/migrate.log; then echo 'P3005: baselining migration 0_init'; npx prisma migrate resolve --applied 0_init; else echo 'Migration failed, see /tmp/migrate.log'; exit 1; fi; fi; exec node dist/server.js"]

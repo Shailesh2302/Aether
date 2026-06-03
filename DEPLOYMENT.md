@@ -89,7 +89,8 @@ Follow the prompts. The `vercel.json` in the root is auto-detected.
    - `aether-ai` (web, Python)
    - `aether-worker` (worker, Rust)
 5. Render will pre-fill env vars marked `sync: false` — you must fill them manually:
-   - `POSTGRES_URL` — your Neon connection string
+   - `POSTGRES_URL` — your Neon **pooled** connection string (hostname contains `-pooler`)
+   - `POSTGRES_DIRECT_URL` — your Neon **direct** connection string (strip `-pooler` from the hostname). Required for `prisma migrate deploy` to work; the migration engine needs session features that the transaction-mode pooler doesn't support.
    - `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` — Redis Cloud
    - `QDRANT_HOST`, `QDRANT_API_KEY` — Qdrant Cloud
    - `NVIDIA_API_KEY` — from [build.nvidia.com](https://build.nvidia.com)
@@ -133,6 +134,7 @@ Open the Vercel URL in a browser — you should be able to log in, upload files,
 ## Known issues on free tier
 
 1. **Cold starts**: First request to `aether-api` or `aether-ai` after 15 min of inactivity takes 30–60 s. Render spins the service back up.
+2. **Prisma migrations need the direct Neon URL**: If `npx prisma migrate deploy` fails with `Could not parse schema engine response: SyntaxError: Unexpected token 'E', "Error load"...`, the migration engine is hitting Neon's PgBouncer pooler. The pooler is transaction-mode and doesn't support the session features (advisory locks, prepared statements) the migration engine needs. Fix: set `POSTGRES_DIRECT_URL` to Neon's direct (non-pooler) connection string and redeploy.
 2. **AI service memory**: 512 MB is tight. We pin `WHISPER_MODEL=tiny` and disable any heavy local embeddings. If you need transcription quality, upgrade the AI service to Render's Starter plan ($7/mo).
 3. **Worker stops on free tier**: The Rust worker may stop when idle. Re-deploy manually or upgrade.
 4. **No persistent disk on free Render web services**: Files in `./storage/` are lost on redeploy. Use Cloudinary (`STORAGE_TYPE=cloudinary`) for uploads.

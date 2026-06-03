@@ -84,7 +84,14 @@ class StorageService {
       if (!response.ok) {
         const errorText = await response.text();
         logger.error({ error: errorText, status: response.status }, 'Cloudinary upload failed');
-        throw new Error(`Cloudinary upload failed: ${response.status}`);
+        let detail = errorText;
+        try {
+          const parsed = JSON.parse(errorText);
+          detail = parsed?.error?.message || errorText;
+        } catch {
+          // not JSON, keep raw text
+        }
+        throw new Error(`Cloudinary upload failed (${response.status}): ${detail}`);
       }
 
       const result = await response.json() as CloudinaryUploadResult;

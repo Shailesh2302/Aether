@@ -44,4 +44,6 @@ EXPOSE 3001
 # prior `prisma db push` or partial migration) can baseline itself and
 # proceed. On any other migration error we fail fast so the deploy
 # surfaces the real problem.
-CMD ["bash", "-c", "npx prisma migrate deploy 2>&1 | tee /tmp/migrate.log; if [ ${PIPESTATUS[0]} -ne 0 ]; then if grep -q P3005 /tmp/migrate.log; then echo 'P3005: baselining migration 0_init'; npx prisma migrate resolve --applied 0_init; else echo 'Migration failed, see /tmp/migrate.log'; exit 1; fi; fi; exec node dist/server.js"]
+# Uses POSIX `sh` (not `bash`) because node:20-alpine ships BusyBox ash,
+# not bash. Exit code is captured in $rc instead of bash's $PIPESTATUS.
+CMD ["sh", "-c", "npx prisma migrate deploy > /tmp/migrate.log 2>&1; rc=$?; if [ $rc -ne 0 ] && grep -q P3005 /tmp/migrate.log; then echo 'P3005: baselining migration 0_init'; npx prisma migrate resolve --applied 0_init; elif [ $rc -ne 0 ]; then echo 'Migration failed, see /tmp/migrate.log'; exit 1; fi; exec node dist/server.js"]

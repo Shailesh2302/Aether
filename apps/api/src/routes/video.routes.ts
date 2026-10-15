@@ -1,5 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { requireSubscription } from '../middleware/subscription.js';
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/db.js';
@@ -15,6 +16,7 @@ const requireOwnedFile = async (fileId: unknown, userId: string): Promise<boolea
 router.post(
   '/summary',
   authenticate,
+  requireSubscription,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { fileId } = req.body;
@@ -51,6 +53,7 @@ router.post(
 router.post(
   '/ask',
   authenticate,
+  requireSubscription,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { fileId, question } = req.body;
@@ -147,6 +150,7 @@ router.get(
 router.post(
   '/smart-clips',
   authenticate,
+  requireSubscription,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { fileId, maxClips = 5 } = req.body;

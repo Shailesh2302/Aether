@@ -23,6 +23,7 @@ model User {
   clips         Clip[]
   messages      Message[]
   jobs          Job[]
+  subscription  Subscription?
 
   @@map("users")
 }
@@ -157,20 +158,20 @@ model Clip {
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   fileId        String?
   file          File?     @relation(fields: [fileId], references: [id], onDelete: SetNull)
-  
+
   title         String
   description   String?
   startTime     Float
   endTime       Float
   thumbnail     String?
   videoUrl      String?
-  
+
   status        ClipStatus @default(PENDING)
-  
+
   tags          String[]
-  
+
   metadata      Json?
-  
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -184,4 +185,49 @@ enum ClipStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  plan                 BillingPlan       @default(TRIAL)
+  status               SubscriptionStatus @default(TRIALING)
+
+  // 30-day free trial window (from account creation)
+  trialEndsAt          DateTime
+
+  // Current paid period (null while trialing / never subscribed)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+
+  cancelAtPeriodEnd    Boolean            @default(false)
+
+  // Stripe references
+  stripeCustomerId     String?
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([status])
+  @@index([trialEndsAt])
+  @@map("subscriptions")
+}
+
+enum BillingPlan {
+  TRIAL
+  PLAN_3_MONTH
+  PLAN_6_MONTH
+  PLAN_12_MONTH
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
 }

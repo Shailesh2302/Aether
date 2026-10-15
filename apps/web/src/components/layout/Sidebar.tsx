@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Scissors,
   Settings,
+  Crown,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/videos", label: "Videos", icon: Video },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
   { href: "/dashboard/clips", label: "Clips", icon: Scissors },
+  { href: "/dashboard/billing", label: "Billing", icon: Crown },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

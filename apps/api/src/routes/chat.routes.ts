@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { requireSubscription } from '../middleware/subscription.js';
 import { aiService } from '../services/ai.service.js';
 import { vectorService } from '../services/vector.service.js';
 import { prisma } from '../config/db.js';
@@ -20,6 +21,7 @@ const validateRequest = (req: Request, res: Response, next: NextFunction) => {
 router.post(
   '/',
   authenticate,
+  requireSubscription,
   [
     body('message').notEmpty().withMessage('Message is required'),
     body('sessionId').optional().isUUID().withMessage('Invalid session ID'),
@@ -169,6 +171,7 @@ router.post(
 router.post(
   '/stream',
   authenticate,
+  requireSubscription,
   [
     body('message').notEmpty().withMessage('Message is required'),
   ],

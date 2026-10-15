@@ -93,7 +93,10 @@ Follow the prompts. The `vercel.json` in the root is auto-detected.
    - `POSTGRES_DIRECT_URL` — your Neon **direct** connection string (strip `-pooler` from the hostname). Required for `prisma migrate deploy` to work; the migration engine needs session features that the transaction-mode pooler doesn't support.
    - `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` — Redis Cloud
    - `QDRANT_HOST`, `QDRANT_API_KEY` — Qdrant Cloud
-   - `NVIDIA_API_KEY` — from [build.nvidia.com](https://build.nvidia.com)
+    - `NVIDIA_API_KEY` — from [build.nvidia.com](https://build.nvidia.com)
+    - `STRIPE_SECRET_KEY` — from [dashboard.stripe.com](https://dashboard.stripe.com) (test mode key `sk_test_...` is fine to start). Without it, trials still work but checkout returns 503.
+    - `STRIPE_WEBHOOK_SECRET` — create a webhook endpoint in Stripe pointing at `https://<your-api>.onrender.com/api/subscription/webhook`, listening to `checkout.session.completed`, `invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.deleted`. No pre-created Prices needed — the API creates inline prices ($10/3mo, $15/6mo, $20/12mo).
+    - `APP_URL` — your Vercel URL (used for Stripe success/cancel redirects)
    - `CLOUDINARY_*` — from [cloudinary.com](https://cloudinary.com) (or set `STORAGE_TYPE=local` and accept ephemeral storage)
 6. Click **Apply** — Render builds and deploys all 3 services.
 

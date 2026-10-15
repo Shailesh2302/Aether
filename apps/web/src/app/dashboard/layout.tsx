@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Sidebar, MobileNav } from "@/components/layout/Sidebar";
+import { TrialBanner } from "@/components/billing/TrialBanner";
 import { Spinner } from "@/components/ui/spinner";
 
 export default function DashboardLayout({
@@ -43,6 +44,7 @@ export default function DashboardLayout({
           </Link>
           <MobileNav />
         </div>
+        <TrialBanner />
         {children}
       </div>
     </div>);

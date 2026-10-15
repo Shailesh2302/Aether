@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import path from 'path';
 import { prisma } from '../config/db.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { requireSubscription } from '../middleware/subscription.js';
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 
@@ -19,6 +20,7 @@ const validateRequest = (req: Request, res: Response, next: NextFunction) => {
 router.post(
   '/',
   authenticate,
+  requireSubscription,
   [
     body('fileId').notEmpty().withMessage('File ID is required'),
   ],

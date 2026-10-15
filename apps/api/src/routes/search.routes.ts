@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { randomUUID } from 'crypto';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { requireSubscription } from '../middleware/subscription.js';
 import { aiService } from '../services/ai.service.js';
 import { vectorService } from '../services/vector.service.js';
 import { prisma } from '../config/db.js';
@@ -94,6 +95,7 @@ async function semanticSearch(
 router.get(
   '/',
   authenticate,
+  requireSubscription,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const q = req.query.q as string | undefined;
@@ -114,6 +116,7 @@ router.get(
 router.post(
   '/',
   authenticate,
+  requireSubscription,
   [
     body('query').notEmpty().withMessage('Query is required'),
   ],
@@ -136,6 +139,7 @@ router.post(
 router.post(
   '/index',
   authenticate,
+  requireSubscription,
   [
     body('fileId').notEmpty().withMessage('File ID is required'),
     body('text').notEmpty().withMessage('Text content is required'),

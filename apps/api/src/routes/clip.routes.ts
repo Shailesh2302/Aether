@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { prisma } from '../config/db.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { requireSubscription } from '../middleware/subscription.js';
 import { queueService } from '../services/queue.service.js';
 import { logger } from '../config/logger.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -45,6 +46,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
 router.post(
   '/',
   authenticate,
+  requireSubscription,
   [
     body('fileId').notEmpty().withMessage('File ID is required'),
     body('title').notEmpty().withMessage('Title is required'),
@@ -148,6 +150,7 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response, next
 router.post(
   '/generate',
   authenticate,
+  requireSubscription,
   [
     body('fileId').notEmpty().withMessage('File ID is required'),
     body('startTime').isFloat({ min: 0 }).withMessage('Start time must be a positive number'),

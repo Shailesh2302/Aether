@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { prisma } from '../config/db.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { requireSubscription } from '../middleware/subscription.js';
 import { storageService } from '../services/storage.service.js';
 import { queueService } from '../services/queue.service.js';
 import { config } from '../config/env.js';
@@ -185,6 +186,7 @@ async function indexDocumentInBackground(
 router.post(
   '/',
   authenticate,
+  requireSubscription,
   upload.single('file'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -212,6 +214,7 @@ router.post(
 router.post(
   '/multiple',
   authenticate,
+  requireSubscription,
   upload.array('files', 10),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {

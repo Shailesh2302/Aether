@@ -48,6 +48,15 @@ api.interceptors.response.use(
         window.location.href = "/login";
       }
     }
+    if (error.response?.status === 402) {
+      if (
+        typeof window !== "undefined" &&
+        !window.location.pathname.startsWith("/pricing") &&
+        !window.location.pathname.startsWith("/dashboard/billing")
+      ) {
+        window.location.href = "/pricing?expired=1";
+      }
+    }
     return Promise.reject(error);
   }
 );
@@ -60,6 +69,75 @@ export function extractErrorMessage(error: unknown, fallback = "Something went w
   if (error instanceof Error) return error.message;
   return fallback;
 }
+
+export function isSubscriptionRequired(error: unknown): boolean {
+  if (axios.isAxiosError(error)) {
+    return (
+      error.response?.status === 402 ||
+      (error.response?.data as { code?: string } | undefined)?.code ===
+        "SUBSCRIPTION_REQUIRED"
+    );
+  }
+  return false;
+}
+
+// ============================================================================
+// Subscription / Billing API
+// ============================================================================
+
+export type BillingPlanId = "PLAN_3_MONTH" | "PLAN_6_MONTH" | "PLAN_12_MONTH";
+
+export interface BillingPlan {
+  id: BillingPlanId;
+  months: number;
+  priceCents: number;
+  priceDollars: number;
+  label: string;
+  tagline: string;
+}
+
+export interface PlansResponse {
+  trialDays: number;
+  currency: string;
+  paymentsConfigured: boolean;
+  plans: BillingPlan[];
+}
+
+export interface SubscriptionStatus {
+  access: "trial" | "active" | "expired";
+  status: string;
+  plan: string;
+  trialDaysLeft: number;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  trialDays: number;
+  paymentsConfigured: boolean;
+}
+
+export const subscriptionApi = {
+  async plans(): Promise<PlansResponse> {
+    const { data } = await api.get<PlansResponse>("/subscription/plans");
+    return data;
+  },
+
+  async status(): Promise<SubscriptionStatus> {
+    const { data } = await api.get<SubscriptionStatus>("/subscription/status");
+    return data;
+  },
+
+  async checkout(plan: BillingPlanId): Promise<{ url: string | null; sessionId: string }> {
+    const { data } = await api.post<{ url: string | null; sessionId: string }>(
+      "/subscription/checkout",
+      { plan }
+    );
+    return data;
+  },
+
+  async cancel(): Promise<{ success: boolean; cancelAtPeriodEnd: boolean }> {
+    const { data } = await api.post("/subscription/cancel");
+    return data as { success: boolean; cancelAtPeriodEnd: boolean };
+  },
+};
 
 // ============================================================================
 // Types

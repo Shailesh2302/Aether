@@ -39,6 +39,12 @@ services:
         generateValue: true
       - key: JWT_EXPIRY
         value: 7d
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: APP_URL
+        value: https://aether-web.vercel.app
       - key: STORAGE_TYPE
         value: cloudinary
       - key: CLOUDINARY_CLOUD_NAME

@@ -81,29 +81,38 @@ UNIQUE_EMAIL="testuser_$(date +%s)@aether.com"
 test_case "Register User" "POST" "$BASE_URL/api/auth/register" \
     "{\"email\":\"$UNIQUE_EMAIL\",\"password\":\"Test123!\",\"name\":\"Test User\"}" "token"
 
-# Login with the main test account
+# Login with the fresh trial account (paid endpoints need an active trial;
+# the legacy test@aether.com account's 30-day trial has expired on purpose).
 LOGIN_RESP=$(curl -s --max-time 15 -X POST "$BASE_URL/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d '{"email":"test@aether.com","password":"Test123!"}')
+    -d "{\"email\":\"$UNIQUE_EMAIL\",\"password\":\"Test123!\"}")
 TOKEN=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
-if [ -z "$TOKEN" ]; then
-    # Try the unique account we just created
-    LOGIN_RESP=$(curl -s --max-time 15 -X POST "$BASE_URL/api/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "{\"email\":\"$UNIQUE_EMAIL\",\"password\":\"Test123!\"}")
-    TOKEN=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
-fi
 echo -e "\n${YELLOW}Auth token: ${TOKEN:0:30}...${RESET}"
 
 AUTH="Authorization: Bearer $TOKEN"
 
+# Legacy account token (expired trial) for paywall assertions
+OLD_LOGIN=$(curl -s --max-time 15 -X POST "$BASE_URL/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"test@aether.com","password":"Test123!"}')
+OLD_TOKEN=$(echo "$OLD_LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+OLD_AUTH="Authorization: Bearer $OLD_TOKEN"
+
 test_case "Login" "POST" "$BASE_URL/api/auth/login" \
     '{"email":"test@aether.com","password":"Test123!"}' "token"
-test_case "Get Current User" "GET" "$BASE_URL/api/auth/me" "" "test@aether.com" "" "$AUTH"
+test_case "Get Current User" "GET" "$BASE_URL/api/auth/me" "" "$UNIQUE_EMAIL" "" "$AUTH"
 test_case "Update Profile" "PUT" "$BASE_URL/api/auth/me" \
     '{"name":"Updated Test User"}' "Updated" "" "$AUTH"
 test_case "Change Password (wrong old)" "POST" "$BASE_URL/api/auth/change-password" \
     '{"currentPassword":"wrong","newPassword":"NewTest123!"}' "error" "" "$AUTH"
+
+# ─── 2b. SUBSCRIPTION ───────────────────────────────────────
+
+test_case "Plans (public)" "GET" "$BASE_URL/api/subscription/plans" "" "PLAN_6_MONTH"
+test_case "Trial Status (fresh user)" "GET" "$BASE_URL/api/subscription/status" "" "TRIALING" "" "$AUTH"
+test_case "Expired Status (old user)" "GET" "$BASE_URL/api/subscription/status" "" "EXPIRED" "" "$OLD_AUTH"
+test_case "Expired Search Blocked" "GET" "$BASE_URL/api/search?q=test" "" "SUBSCRIPTION_REQUIRED" "" "$OLD_AUTH"
+test_case "Expired Upload Blocked" "POST" "$BASE_URL/api/files/upload" "" "SUBSCRIPTION_REQUIRED" "" "$OLD_AUTH"
 
 # ─── 3. USERS ──────────────────────────────────────────────
 
@@ -281,7 +290,7 @@ else
     FAIL=$((FAIL+1))
 fi
 
-FRONTEND_PAGES=("/dashboard" "/upload" "/search" "/dashboard/files" "/dashboard/videos" "/dashboard/chat" "/dashboard/clips" "/dashboard/settings")
+FRONTEND_PAGES=("/dashboard" "/upload" "/search" "/pricing" "/dashboard/files" "/dashboard/videos" "/dashboard/chat" "/dashboard/clips" "/dashboard/settings" "/dashboard/billing")
 for page in "${FRONTEND_PAGES[@]}"; do
     code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$WEB_URL$page" 2>/dev/null)
     if [ "$code" = "200" ]; then

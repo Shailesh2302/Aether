@@ -11,6 +11,7 @@ import { vectorService } from './services/vector.service.js';
 import { queueService } from './services/queue.service.js';
 
 import authRoutes from './modules/auth/auth.routes.js';
+import subscriptionRoutes from './modules/subscription/subscription.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import fileRoutes from './routes/file.routes.js';
@@ -32,7 +33,11 @@ app.use(cors({
   origin: config.corsOrigin,
   credentials: true,
 }));
-app.use(express.json());
+// Stripe webhooks need the raw request body for signature verification,
+// so parse just that path as raw BEFORE the JSON parser runs. body-parser
+// marks the request handled, so express.json() skips it afterwards.
+app.use('/api/subscription/webhook', express.raw({ type: 'application/json' }));
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 if (!fs.existsSync('./storage/uploads')) {
@@ -103,6 +108,7 @@ app.get('/api/health/detailed', async (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/files', fileRoutes);

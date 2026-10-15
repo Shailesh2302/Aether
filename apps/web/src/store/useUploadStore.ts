@@ -22,7 +22,18 @@ interface UploadState {
   fetchFiles: () => Promise<void>;
   deleteFile: (id: string) => Promise<void>;
   addLocalFile: (file: FileItem) => void;
+  pollFileStatus: (id: string) => void;
   clearError: () => void;
+}
+
+const pollTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function stopPoll(id: string) {
+  const t = pollTimers.get(id);
+  if (t) {
+    clearTimeout(t);
+    pollTimers.delete(id);
+  }
 }
 
 export const useUploadStore = create<UploadState>((set, get) => ({
@@ -71,6 +82,12 @@ export const useUploadStore = create<UploadState>((set, get) => ({
         files: [uploaded, ...state.files],
         isLoading: false,
       }));
+
+      // Files land as PENDING/PROCESSING; poll until the worker finishes
+      // so badges flip to Ready without a manual refresh.
+      if (uploaded.status === "PENDING" || uploaded.status === "PROCESSING") {
+        get().pollFileStatus(uploaded.id);
+      }
 
       return uploaded;
     } catch (error) {
@@ -121,6 +138,7 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   },
 
   deleteFile: async (id) => {
+    stopPoll(id);
     try {
       await filesApi.delete(id);
       set((state) => ({
@@ -133,6 +151,31 @@ export const useUploadStore = create<UploadState>((set, get) => ({
         files: state.files.filter((f) => f.id !== id),
       }));
     }
+  },
+
+  pollFileStatus: (id) => {
+    stopPoll(id);
+    let attempts = 0;
+    const tick = async () => {
+      attempts += 1;
+      try {
+        const file = await filesApi.get(id);
+        set((state) => ({
+          files: state.files.map((f) => (f.id === id ? file : f)),
+        }));
+        if (file.status === "COMPLETED" || file.status === "FAILED") {
+          stopPoll(id);
+          return;
+        }
+      } catch {
+        stopPoll(id);
+        return;
+      }
+      if (attempts < 120) {
+        pollTimers.set(id, setTimeout(tick, 5000));
+      }
+    };
+    pollTimers.set(id, setTimeout(tick, 5000));
   },
 
   addLocalFile: (file) => {

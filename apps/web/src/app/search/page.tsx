@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import Link from "next/link";
 import { useSearch } from "@/hooks/useSearch";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,16 @@ const TIPS = [
 export default function SearchPage() {
   const { query, results, isLoading, error, search, clearResults } = useSearch();
   const [input, setInput] = useState("");
+
+  // Deep-link support: /search?q=... (used by the voice assistant).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q") || "";
+    if (q.trim()) {
+      setInput(q);
+      search(q.trim());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

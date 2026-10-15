@@ -411,17 +411,24 @@ export const userApi = {
 // Files API
 // ============================================================================
 
+function withThumbUrl<T extends { id: string; mimeType: string; thumbnailUrl?: string | null }>(file: T): T {
+  if (file.mimeType.startsWith("video/") || file.mimeType.startsWith("audio/")) {
+    return { ...file, thumbnailUrl: filesApi.thumbnailUrl(file.id) };
+  }
+  return file;
+}
+
 export const filesApi = {
   async list(): Promise<FileItem[]> {
     const { data } = await api.get<{ files?: FileItem[] } | FileItem[]>("/files");
-    if (Array.isArray(data)) return data;
-    return data.files ?? [];
+    const files = Array.isArray(data) ? data : (data.files ?? []);
+    return files.map(withThumbUrl);
   },
 
   async get(id: string) {
     const { data } = await api.get<{ file: FileItem } | FileItem>(`/files/${id}`);
-    if ("file" in data) return data.file;
-    return data;
+    const file = "file" in data ? data.file : data;
+    return withThumbUrl(file);
   },
 
   async delete(id: string) {
@@ -450,6 +457,22 @@ export const filesApi = {
 
   async triggerIndex(fileId: string) {
     const { data } = await api.post("/index", { fileId });
+    return data;
+  },
+
+  thumbnailUrl(id: string, t?: number) {
+    // <img> can't send Authorization headers, so the token travels as ?token=
+    const token = typeof window !== "undefined" ? getToken() : null;
+    const params = new URLSearchParams();
+    if (t !== undefined) params.set("t", String(Math.round(t)));
+    if (token) params.set("token", token);
+    const qs = params.toString();
+    return `/api/files/${id}/thumbnail${qs ? `?${qs}` : ""}`;
+  },
+
+  async rename(id: string, name: string) {
+    const { data } = await api.patch<{ file: FileItem } | FileItem>(`/files/${id}`, { name });
+    if ("file" in data) return data.file;
     return data;
   },
 };

@@ -3,6 +3,7 @@ import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { GlobalWidgets } from "@/components/GlobalWidgets";
 import { Providers } from "./providers";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -46,6 +47,7 @@ export default function RootLayout({
               }}
             />
             {children}
+            <GlobalWidgets />
             <Toaster />
           </TooltipProvider>
         </Providers>

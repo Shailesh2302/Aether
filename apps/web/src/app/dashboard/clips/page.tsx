@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { clipsApi, type Clip, type FileItem } from "@/lib/api";
+import { clipsApi, videoApi, filesApi, type Clip, type FileItem, type SmartClip } from "@/lib/api";
 import { useUpload } from "@/hooks/useUpload";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,9 @@ import {
   Video as VideoIcon,
   Clock,
   Loader2,
+  Sparkles,
+  Download,
+  Zap,
 } from "lucide-react";
 import {
   Dialog,
@@ -48,6 +51,12 @@ export default function ClipsPage() {
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [playingClip, setPlayingClip] = useState<Clip | null>(null);
   const [fileFilter, setFileFilter] = useState<string>("all");
+  const [highlightVideoId, setHighlightVideoId] = useState<string>("");
+  const [highlights, setHighlights] = useState<SmartClip[]>([]);
+  const [highlightsLoading, setHighlightsLoading] = useState(false);
+  const [highlightsError, setHighlightsError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ clip: SmartClip; fileId: string } | null>(null);
+  const [gettingClip, setGettingClip] = useState<string | null>(null);
 
   const fileList = useMemo(() => (Array.isArray(files) ? files : []), [files]);
   const videos = useMemo(
@@ -77,6 +86,53 @@ export default function ClipsPage() {
     fetchFiles();
   }, [fetchFiles]);
 
+  // Default the highlights section to the first ready video.
+  useEffect(() => {
+    if (!highlightVideoId) {
+      const ready = videos.find((v) => v.status === "COMPLETED") ?? videos[0];
+      if (ready) setHighlightVideoId(ready.id);
+    }
+  }, [videos, highlightVideoId]);
+
+  const loadHighlights = async (fileId: string) => {
+    if (!fileId) return;
+    setHighlightsLoading(true);
+    setHighlightsError(null);
+    try {
+      const data = await videoApi.getSmartClips(fileId, 6);
+      setHighlights(data.clips ?? []);
+    } catch {
+      setHighlights([]);
+      setHighlightsError("Couldn't load highlights for this video yet. Try again once processing finishes.");
+    } finally {
+      setHighlightsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (highlightVideoId) loadHighlights(highlightVideoId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightVideoId]);
+
+  const handleGetHighlightClip = async (clip: SmartClip) => {
+    const key = `${clip.start_sec}-${clip.end_sec}`;
+    setGettingClip(key);
+    try {
+      await clipsApi.generate({
+        fileId: highlightVideoId,
+        startTime: clip.start_sec,
+        endTime: clip.end_sec,
+        title: clip.title,
+      });
+      toast({ title: "Clip ready", description: `"${clip.title}" was added to your clips.` });
+      await fetchClips();
+    } catch {
+      toast({ title: "Couldn't create clip", description: "Please try again", variant: "destructive" });
+    } finally {
+      setGettingClip(null);
+    }
+  };
+
   const handleDelete = async (clip: Clip) => {
     if (!confirm(`Delete clip "${clip.title}"?`)) return;
     try {
@@ -103,6 +159,11 @@ export default function ClipsPage() {
     if (!playingClip?.fileId) return null;
     return fileList.find((f) => f.id === playingClip.fileId) ?? null;
   }, [playingClip, fileList]);
+
+  const previewFile = useMemo(() => {
+    if (!preview) return null;
+    return fileList.find((f) => f.id === preview.fileId) ?? null;
+  }, [preview, fileList]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -168,6 +229,127 @@ export default function ClipsPage() {
                   </div>
                 </button>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* AI Highlights — pre-processed key moments with one-click clips */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              AI Highlights
+            </CardTitle>
+            <CardDescription>
+              Key moments detected in your video — preview one, or save it as a clip
+            </CardDescription>
+          </div>
+          {videos.length > 0 && (
+            <Select value={highlightVideoId} onValueChange={setHighlightVideoId}>
+              <SelectTrigger className="w-52">
+                <SelectValue placeholder="Select video" />
+              </SelectTrigger>
+              <SelectContent>
+                {videos.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.originalName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </CardHeader>
+        <CardContent>
+          {videos.length === 0 ? (
+            <div className="py-8 text-center">
+              <Zap className="mx-auto h-8 w-8 text-muted-foreground/50" />
+              <p className="mt-2 text-sm text-muted-foreground">
+                Upload a video and highlights will appear here automatically
+              </p>
+              <Button asChild size="sm" className="mt-3">
+                <Link href="/upload">Upload a video</Link>
+              </Button>
+            </div>
+          ) : highlightsLoading ? (
+            <div className="flex justify-center py-8">
+              <Spinner size="lg" />
+            </div>
+          ) : highlightsError ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">{highlightsError}</p>
+          ) : highlights.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No highlights detected for this video yet.
+            </p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {highlights.map((h, i) => {
+                const key = `${h.start_sec}-${h.end_sec}`;
+                return (
+                  <div
+                    key={key}
+                    className="group overflow-hidden rounded-md border bg-card transition-colors hover:border-primary/40"
+                  >
+                    <button
+                      className="relative block aspect-video w-full bg-muted text-left"
+                      onClick={() => setPreview({ clip: h, fileId: highlightVideoId })}
+                      aria-label={`Preview ${h.title}`}
+                    >
+                      <img
+                        src={filesApi.thumbnailUrl(highlightVideoId, h.start_sec)}
+                        alt={h.title}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30">
+                        <Play className="h-8 w-8 fill-current text-white opacity-0 transition-opacity group-hover:opacity-100" />
+                      </div>
+                      <div className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] text-white">
+                        {formatDuration(h.start_sec)} – {formatDuration(h.end_sec)}
+                      </div>
+                      {typeof h.importance_score === "number" && (
+                        <div className="absolute top-1.5 left-1.5">
+                          <Badge variant="secondary">
+                            {Math.round(h.importance_score * 100)}%
+                          </Badge>
+                        </div>
+                      )}
+                    </button>
+                    <div className="space-y-2 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium leading-snug">{h.title}</p>
+                        {h.category && (
+                          <Badge variant="outline" className="shrink-0 text-[10px]">
+                            {h.category}
+                          </Badge>
+                        )}
+                      </div>
+                      {h.description && (
+                        <p className="line-clamp-2 text-xs text-muted-foreground">
+                          {h.description}
+                        </p>
+                      )}
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        disabled={gettingClip === key}
+                        onClick={() => handleGetHighlightClip(h)}
+                      >
+                        {gettingClip === key ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" />
+                        )}
+                        Get this clip
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -316,6 +498,46 @@ export default function ClipsPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Highlight preview dialog */}
+      <Dialog
+        open={!!preview}
+        onOpenChange={(open) => !open && setPreview(null)}
+      >
+        <DialogContent className="max-w-4xl p-0 overflow-hidden">
+          {preview && (
+            <div>
+              <DialogHeader className="px-6 pt-6 pb-2">
+                <DialogTitle className="truncate">{preview.clip.title}</DialogTitle>
+              </DialogHeader>
+              <div className="px-6 pb-6 space-y-3">
+                {previewFile?.url ? (
+                  <VideoPlayer
+                    src={previewFile.url}
+                    initialTime={preview.clip.start_sec}
+                    className="w-full"
+                  />
+                ) : (
+                  <div className="aspect-video bg-muted flex items-center justify-center rounded-md">
+                    <p className="text-sm text-muted-foreground">Source video unavailable</p>
+                  </div>
+                )}
+                {preview.clip.description && (
+                  <p className="text-sm text-muted-foreground">{preview.clip.description}</p>
+                )}
+                <Button
+                  className="w-full"
+                  disabled={gettingClip === `${preview.clip.start_sec}-${preview.clip.end_sec}`}
+                  onClick={() => handleGetHighlightClip(preview.clip)}
+                >
+                  <Download className="h-4 w-4" />
+                  Get this clip
+                </Button>
               </div>
             </div>
           )}

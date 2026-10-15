@@ -28,6 +28,9 @@ import {
   FileText,
   Trash2,
   FolderOpen,
+  Download,
+  Pencil,
+  HardDrive,
 } from "lucide-react";
 import {
   formatDate,
@@ -38,7 +41,11 @@ import {
   cn,
 } from "@/lib/utils";
 import type { FileItem } from "@/lib/api";
+import { filesApi, userApi } from "@/lib/api";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
+
+const STORAGE_QUOTA_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB cloud storage per account
 
 type FilterType = "all" | "video" | "audio" | "image" | "document";
 
@@ -47,9 +54,14 @@ export default function FilesPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [view, setView] = useState<"grid" | "list">("grid");
+  const [storageUsed, setStorageUsed] = useState(0);
 
   useEffect(() => {
     fetchFiles();
+    userApi
+      .getStats()
+      .then((s) => setStorageUsed(s.storageUsed ?? 0))
+      .catch(() => undefined);
   }, [fetchFiles]);
 
   const fileList = useMemo(() => (Array.isArray(files) ? files : []), [files]);
@@ -73,6 +85,20 @@ export default function FilesPage() {
       toast({ title: "Deleted", description: "Removed from your library" });
     }
   };
+
+  const handleRename = async (file: FileItem) => {
+    const next = prompt("Rename file", file.name || file.originalName);
+    if (!next || !next.trim() || next.trim() === file.name) return;
+    try {
+      await filesApi.rename(file.id, next.trim());
+      await fetchFiles();
+      toast({ title: "File renamed" });
+    } catch {
+      toast({ title: "Rename failed", variant: "destructive" });
+    }
+  };
+
+  const quotaPct = Math.min(100, (storageUsed / STORAGE_QUOTA_BYTES) * 100);
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -148,6 +174,22 @@ export default function FilesPage() {
         </div>
       </div>
 
+      {/* Cloud storage quota */}
+      <Card>
+        <CardContent className="flex items-center gap-3 p-4">
+          <HardDrive className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium">Cloud storage</span>
+              <span className="text-muted-foreground">
+                {formatFileSize(storageUsed)} of {formatFileSize(STORAGE_QUOTA_BYTES)} used
+              </span>
+            </div>
+            <Progress value={quotaPct} className="mt-2 h-1.5" />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Results */}
       {isFetching && fileList.length === 0 ? (
         <div className="py-16 text-center text-sm text-muted-foreground">
@@ -162,6 +204,7 @@ export default function FilesPage() {
               key={file.id}
               file={file}
               onDelete={() => handleDelete(file)}
+              onRename={() => handleRename(file)}
             />
           ))}
         </div>
@@ -174,6 +217,7 @@ export default function FilesPage() {
                   key={file.id}
                   file={file}
                   onDelete={() => handleDelete(file)}
+                  onRename={() => handleRename(file)}
                 />
               ))}
             </div>
@@ -206,9 +250,11 @@ function CategoryIcon({
 function FileGridCard({
   file,
   onDelete,
+  onRename,
 }: {
   file: FileItem;
   onDelete: () => void;
+  onRename: () => void;
 }) {
   const category = getFileCategory(file.mimeType);
   const href =
@@ -248,16 +294,39 @@ function FileGridCard({
           <span className="text-xs text-muted-foreground">
             {formatFileSize(file.size)}
           </span>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              onDelete();
-            }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-            aria-label="Delete file"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center opacity-0 transition-opacity group-hover:opacity-100">
+            {file.url && (
+              <a
+                href={file.url}
+                download={file.originalName}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="Download file"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </a>
+            )}
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                onRename();
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label="Rename file"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                onDelete();
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Delete file"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -267,9 +336,11 @@ function FileGridCard({
 function FileListRow({
   file,
   onDelete,
+  onRename,
 }: {
   file: FileItem;
   onDelete: () => void;
+  onRename: () => void;
 }) {
   const category = getFileCategory(file.mimeType);
   const href =
@@ -298,6 +369,23 @@ function FileListRow({
       >
         <Trash2 className="h-4 w-4" />
       </button>
+      <button
+        onClick={onRename}
+        className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+        aria-label="Rename file"
+      >
+        <Pencil className="h-4 w-4" />
+      </button>
+      {file.url && (
+        <a
+          href={file.url}
+          download={file.originalName}
+          className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label="Download file"
+        >
+          <Download className="h-4 w-4" />
+        </a>
+      )}
     </div>
   );
 }

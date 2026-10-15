@@ -6,6 +6,7 @@ import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { requireSubscription } from '../middleware/subscription.js';
 import { storageService } from '../services/storage.service.js';
 import { queueService } from '../services/queue.service.js';
+import { getVideoMetadata } from '../utils/ffmpeg.js';
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 
@@ -84,6 +85,22 @@ async function processUploadedFile(
 ): Promise<UploadedFileInfo> {
   const storageResult = await storageService.saveFile(buffer, originalName);
 
+  // Probe media duration/dimensions so library UIs can render
+  // thumbnails, durations and quota info without extra requests.
+  let metadata: Record<string, unknown> | undefined;
+  if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) {
+    try {
+      const info = await getVideoMetadata(path.resolve(storageResult.path));
+      metadata = {
+        duration: info.duration,
+        width: info.width,
+        height: info.height,
+      };
+    } catch (probeErr) {
+      logger.warn({ probeErr, originalName }, 'Media probe failed, continuing without metadata');
+    }
+  }
+
   const dbFile = await prisma.file.create({
     data: {
       userId,
@@ -94,6 +111,7 @@ async function processUploadedFile(
       path: storageResult.path,
       url: storageResult.url,
       status: 'PENDING',
+      metadata: (metadata ?? {}) as Record<string, string | number>,
     },
   });
 

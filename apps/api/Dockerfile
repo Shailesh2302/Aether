@@ -46,4 +46,8 @@ EXPOSE 3001
 # surfaces the real problem.
 # Uses POSIX `sh` (not `bash`) because node:20-alpine ships BusyBox ash,
 # not bash. Exit code is captured in $rc instead of bash's $PIPESTATUS.
-CMD ["sh", "-c", "npx prisma migrate deploy > /tmp/migrate.log 2>&1; rc=$?; if [ $rc -ne 0 ] && grep -q P3005 /tmp/migrate.log; then echo 'P3005: baselining migration 0_init'; npx prisma migrate resolve --applied 0_init; elif [ $rc -ne 0 ]; then echo 'Migration failed, see /tmp/migrate.log'; exit 1; fi; exec node dist/server.js"]
+# The free tier only allows web services (no separate background workers),
+# so the Node queue worker (video/document/clip processing) runs inside
+# this same container next to the API server. When Redis is unavailable
+# entirely, routes fall back to inline background processing instead.
+CMD ["sh", "-c", "npx prisma migrate deploy > /tmp/migrate.log 2>&1; rc=$?; if [ $rc -ne 0 ] && grep -q P3005 /tmp/migrate.log; then echo 'P3005: baselining migration 0_init'; npx prisma migrate resolve --applied 0_init; elif [ $rc -ne 0 ]; then echo 'Migration failed, see /tmp/migrate.log'; exit 1; fi; node dist/workers/queue.worker.js > /tmp/worker.log 2>&1 & exec node dist/server.js"]

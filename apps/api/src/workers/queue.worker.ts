@@ -1,10 +1,7 @@
 import { Redis } from 'ioredis';
-import path from 'path';
-import fs from 'fs';
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
-import { prisma } from '../config/db.js';
-import { trimVideo, generateThumbnail } from '../utils/ffmpeg.js';
+import { processVideoFile, processDocumentFile, processClipFile, type JobReporter } from '../services/processing.service.js';
 import type { DocumentJobData, ClipJobData } from '../services/queue.service.js';
 
 // Queue ownership:
@@ -18,6 +15,15 @@ const QUEUES = {
   clip: 'aether:clip:queue',
 };
 
+const redisReporter = (redis: Redis): JobReporter => ({
+  setStatus: async (jobKey, status) => {
+    await redis.hset(`aether:job:${jobKey}`, 'status', status).catch(() => undefined);
+  },
+  setError: async (jobKey, message) => {
+    await redis.hset(`aether:job:${jobKey}`, 'error', message).catch(() => undefined);
+  },
+});
+
 interface VideoJobShape {
   id: string;
   video_id?: string;
@@ -27,172 +33,43 @@ interface VideoJobShape {
 }
 
 async function processVideoJob(redis: Redis, job: VideoJobShape) {
-  const jobKey = job.id;
-  const fileId = job.video_id || job.document_id || '';
-  logger.info({ jobId: jobKey, type: 'video', fileId }, 'Processing video job');
-
-  try {
-    await redis.hset(`aether:job:${jobKey}`, 'status', 'PROCESSING').catch(() => undefined);
-
-    if (fileId) {
-      await prisma.file.update({
-        where: { id: fileId },
-        data: { status: 'PROCESSING' },
-      }).catch(() => undefined);
-    }
-
-    if (!job.input_path || !fs.existsSync(job.input_path)) {
-      throw new Error(`Source video not found: ${job.input_path}`);
-    }
-
-    const aiUrl = config.aiServiceUrl;
-
-    const indexResp = await fetch(`${aiUrl}/api/v1/documents/index`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        file_id: fileId,
-        file_path: path.resolve(job.input_path),
-        user_id: job.parameters?.userId || 'unknown',
-        mime_type: job.parameters?.mimeType || 'video/mp4',
-      }),
-    });
-
-    if (!indexResp.ok) {
-      const errText = await indexResp.text();
-      throw new Error(`Video indexing failed: ${errText.slice(0, 300)}`);
-    }
-
-    if (fileId) {
-      await prisma.file.update({
-        where: { id: fileId },
-        data: { status: 'COMPLETED' },
-      }).catch(() => undefined);
-    }
-
-    await redis.hset(`aether:job:${jobKey}`, 'status', 'COMPLETED').catch(() => undefined);
-    logger.info({ jobId: jobKey, fileId }, 'Video job completed');
-  } catch (err) {
-    logger.error({ jobId: jobKey, err }, 'Video job failed');
-
-    if (fileId) {
-      await prisma.file.update({
-        where: { id: fileId },
-        data: { status: 'FAILED' },
-      }).catch(() => undefined);
-    }
-
-    await redis.hset(`aether:job:${jobKey}`, 'status', 'FAILED').catch(() => undefined);
-    await redis.hset(`aether:job:${jobKey}`, 'error', (err as Error).message).catch(() => undefined);
-  }
+  await processVideoFile(
+    {
+      id: job.id,
+      fileId: job.video_id || job.document_id || '',
+      inputPath: job.input_path || '',
+      mimeType: job.parameters?.mimeType || 'video/mp4',
+      userId: job.parameters?.userId || 'unknown',
+    },
+    redisReporter(redis)
+  ).catch(() => undefined);
 }
 
 async function processDocumentJob(redis: Redis, job: DocumentJobData & { id: string }) {
-  const jobKey = job.id;
-  logger.info({ jobId: jobKey, type: 'document', fileId: job.document_id }, 'Processing document job');
-
-  try {
-    await redis.hset(`aether:job:${jobKey}`, 'status', 'PROCESSING').catch(() => undefined);
-
-    const aiUrl = config.aiServiceUrl;
-
-    const indexResp = await fetch(`${aiUrl}/api/v1/documents/index`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        file_id: job.document_id,
-        file_path: path.resolve(job.input_path),
-        user_id: job.parameters?.userId || 'unknown',
-        mime_type: job.parameters?.mimeType || 'application/octet-stream',
-      }),
-    });
-
-    if (!indexResp.ok) {
-      const errText = await indexResp.text();
-      throw new Error(`Indexing failed: ${errText}`);
-    }
-
-    await prisma.file.update({
-      where: { id: job.document_id },
-      data: { status: 'COMPLETED' },
-    }).catch(() => undefined);
-
-    await redis.hset(`aether:job:${jobKey}`, 'status', 'COMPLETED').catch(() => undefined);
-    logger.info({ jobId: jobKey, fileId: job.document_id }, 'Document job completed');
-  } catch (err) {
-    logger.error({ jobId: jobKey, err }, 'Document job failed');
-
-    if (job?.document_id) {
-      await prisma.file.update({
-        where: { id: job.document_id },
-        data: { status: 'FAILED' },
-      }).catch(() => undefined);
-    }
-
-    await redis.hset(`aether:job:${jobKey}`, 'status', 'FAILED').catch(() => undefined);
-    await redis.hset(`aether:job:${jobKey}`, 'error', (err as Error).message).catch(() => undefined);
-  }
+  await processDocumentFile(
+    {
+      id: job.id,
+      fileId: job.document_id,
+      inputPath: job.input_path,
+      mimeType: job.parameters?.mimeType || 'application/octet-stream',
+      userId: job.parameters?.userId || 'unknown',
+    },
+    redisReporter(redis)
+  ).catch(() => undefined);
 }
 
 async function processClipJob(redis: Redis, job: ClipJobData & { id: string }) {
-  const jobKey = job.id;
-  logger.info({ jobId: jobKey, type: 'clip', fileId: job.video_id }, 'Processing clip job');
-
-  try {
-    await redis.hset(`aether:job:${jobKey}`, 'status', 'PROCESSING').catch(() => undefined);
-
-    if (!fs.existsSync(job.input_path)) {
-      throw new Error(`Source video not found: ${job.input_path}`);
-    }
-
-    const clipsDir = path.resolve(config.storage.clipsDir);
-    fs.mkdirSync(clipsDir, { recursive: true });
-    const clipFilename = `${jobKey.replace(/[^a-zA-Z0-9_-]/g, '_')}.mp4`;
-    const clipPath = path.join(clipsDir, clipFilename);
-
-    await trimVideo(job.input_path, clipPath, Number(job.start_time) || 0, Number(job.end_time) || 10);
-
-    let thumbnail: string | null = null;
-    try {
-      const thumbPath = path.join(clipsDir, clipFilename.replace(/\.mp4$/, '.jpg'));
-      await generateThumbnail(clipPath, thumbPath, 0);
-      thumbnail = `/storage/clips/${path.basename(thumbPath)}`;
-    } catch (thumbErr) {
-      logger.warn({ thumbErr }, 'Thumbnail generation failed');
-    }
-
-    const clipId = job.parameters?.clipId;
-    if (clipId) {
-      await prisma.clip.update({
-        where: { id: clipId },
-        data: {
-          status: 'COMPLETED',
-          videoUrl: `/storage/clips/${clipFilename}`,
-          thumbnail,
-        },
-      });
-    }
-
-    await redis.hset(`aether:job:${jobKey}`, 'status', 'COMPLETED');
-    logger.info({ jobId: jobKey, clipPath }, 'Clip job completed');
-  } catch (err) {
-    logger.error({ jobId: jobKey, err }, 'Clip job failed');
-
-    const clipId = job?.parameters?.clipId;
-    if (clipId) {
-      try {
-        await prisma.clip.update({
-          where: { id: clipId },
-          data: { status: 'FAILED' },
-        });
-      } catch (dbErr) {
-        logger.warn({ dbErr }, 'Failed to mark clip as FAILED');
-      }
-    }
-
-    await redis.hset(`aether:job:${jobKey}`, 'status', 'FAILED');
-    await redis.hset(`aether:job:${jobKey}`, 'error', (err as Error).message);
-  }
+  await processClipFile(
+    {
+      id: job.id,
+      fileId: job.video_id,
+      inputPath: job.input_path,
+      startTime: job.start_time,
+      endTime: job.end_time,
+      clipId: job.parameters?.clipId,
+    },
+    redisReporter(redis)
+  ).catch(() => undefined);
 }
 
 async function pollQueues(redis: Redis) {

@@ -6,6 +6,7 @@ import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { requireSubscription } from '../middleware/subscription.js';
 import { storageService } from '../services/storage.service.js';
 import { queueService } from '../services/queue.service.js';
+import { processVideoFile, processDocumentFile } from '../services/processing.service.js';
 import { getVideoMetadata } from '../utils/ffmpeg.js';
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
@@ -116,17 +117,34 @@ async function processUploadedFile(
   });
 
   try {
+    const queueUp = queueService.isConnected();
     if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) {
-      await queueService.addVideoProcessingJob({
-        fileId: dbFile.id,
-        filePath: storageResult.path,
-        mimeType,
-        userId,
-      });
-      await prisma.file.update({
-        where: { id: dbFile.id },
-        data: { status: 'PROCESSING' },
-      });
+      if (queueUp) {
+        await queueService.addVideoProcessingJob({
+          fileId: dbFile.id,
+          filePath: storageResult.path,
+          mimeType,
+          userId,
+        });
+        await prisma.file.update({
+          where: { id: dbFile.id },
+          data: { status: 'PROCESSING' },
+        });
+      } else {
+        // No Redis (e.g. free-tier prod): transcribe + index inline in the
+        // background instead of leaving the file stuck in PROCESSING.
+        await prisma.file.update({
+          where: { id: dbFile.id },
+          data: { status: 'PROCESSING' },
+        });
+        void processVideoFile({
+          id: `inline:${dbFile.id}`,
+          fileId: dbFile.id,
+          inputPath: storageResult.path,
+          mimeType,
+          userId,
+        }).catch(() => undefined);
+      }
     } else if (DOCUMENT_MIMES.has(mimeType)) {
       await prisma.file.update({
         where: { id: dbFile.id },
@@ -191,6 +209,12 @@ async function indexDocumentInBackground(
       throw new Error(`AI service returned ${aiResponse.status}`);
     }
   } catch (indexError) {
+    if (!queueService.isConnected()) {
+      // No Redis to fall back to - process inline instead of stalling.
+      logger.warn({ fileId }, 'Direct indexing failed and no queue, processing inline');
+      await processDocumentFile({ id: `inline:${fileId}`, fileId, inputPath: filePath, mimeType, userId }).catch(() => undefined);
+      return;
+    }
     logger.warn({ indexError, fileId }, 'Direct indexing failed, enqueuing for worker');
     await queueService.addDocumentProcessingJob({
       fileId,

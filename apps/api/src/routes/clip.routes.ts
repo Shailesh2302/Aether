@@ -218,6 +218,19 @@ router.post(
           throw new Error('Rust worker failed');
         } catch (rustError) {
           logger.info({ clipId: clip.id }, 'Cutting via queue worker');
+          if (!queueService.isConnected()) {
+            // No Redis: cut inline in the background instead of stalling.
+            const { processClipFile } = await import('../services/processing.service.js');
+            void processClipFile({
+              id: `inline:${clip.id}`,
+              fileId,
+              inputPath: file.path,
+              startTime,
+              endTime,
+              clipId: clip.id,
+            }).catch(() => undefined);
+            return;
+          }
           try {
             await queueService.addClipGenerationJob({
               fileId,

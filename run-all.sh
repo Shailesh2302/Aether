@@ -22,14 +22,14 @@ start_services() {
     # Start Web (Next.js)
     echo -e "${GREEN}[1/4]${NC} Starting Web (Next.js)..."
     cd "$ROOT/apps/web"
-    pnpm run dev > /tmp/aether-web.log 2>&1 &
+    bun run dev > /tmp/aether-web.log 2>&1 &
     WEB_PID=$!
     echo "Web PID: $WEB_PID"
 
     # Start API (Node.js)
     echo -e "${GREEN}[2/4]${NC} Starting API (Node.js)..."
     cd "$ROOT/apps/api"
-    pnpm run dev > /tmp/aether-api.log 2>&1 &
+    bun run dev > /tmp/aether-api.log 2>&1 &
     API_PID=$!
     echo "API PID: $API_PID"
 

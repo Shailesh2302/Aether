@@ -118,14 +118,21 @@ export default function ClipsPage() {
     const key = `${clip.start_sec}-${clip.end_sec}`;
     setGettingClip(key);
     try {
-      await clipsApi.generate({
+      const { clip: created } = await clipsApi.generate({
         fileId: highlightVideoId,
         startTime: clip.start_sec,
         endTime: clip.end_sec,
         title: clip.title,
       });
-      toast({ title: "Clip ready", description: `"${clip.title}" was added to your clips.` });
+      // The server cuts in the background - wait for the real file so the
+      // "ready" toast only fires when the clip can actually be played.
+      const finished = await clipsApi.waitUntilReady(created.id);
       await fetchClips();
+      if (finished.status === "COMPLETED") {
+        toast({ title: "Clip ready", description: `"${clip.title}" was added to your clips.` });
+      } else {
+        toast({ title: "Clip failed", description: "Cutting failed - please try again", variant: "destructive" });
+      }
     } catch {
       toast({ title: "Couldn't create clip", description: "Please try again", variant: "destructive" });
     } finally {

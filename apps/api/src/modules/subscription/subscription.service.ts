@@ -53,8 +53,16 @@ export async function getOrCreateSubscription(userId: string) {
 
 /** Lazily expire stale trials / periods, then report access state. */
 export async function getAccessState(userId: string): Promise<AccessState> {
-  const sub = await getOrCreateSubscription(userId);
+  // Neon round-trips dominate API latency (~0.5s each), and access state
+  // changes rarely - cache briefly per user. Writes (activate/cancel/
+  // webhook) invalidate via touchAccessCache().
   const now = new Date();
+  const cached = accessCache.get(userId);
+  if (cached && cached.expiresAt > now.getTime()) {
+    return cached.state;
+  }
+
+  const sub = await getOrCreateSubscription(userId);
 
   let status = sub.status;
   if (status === 'TRIALING' && sub.trialEndsAt <= now) {
@@ -71,7 +79,7 @@ export async function getAccessState(userId: string): Promise<AccessState> {
     ? Math.max(0, Math.ceil((sub.trialEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
     : 0;
 
-  return {
+  const state: AccessState = {
     access: status === 'EXPIRED' || status === 'CANCELED' || status === 'PAST_DUE' ? 'expired' : status === 'TRIALING' ? 'trial' : 'active',
     status,
     plan: sub.plan,
@@ -79,6 +87,16 @@ export async function getAccessState(userId: string): Promise<AccessState> {
     currentPeriodEnd: sub.currentPeriodEnd?.toISOString() ?? null,
     cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
   };
+  accessCache.set(userId, { state, expiresAt: now.getTime() + ACCESS_CACHE_TTL_MS });
+  return state;
+}
+
+// Short-lived access cache (see getAccessState). Invalidated on writes.
+const ACCESS_CACHE_TTL_MS = 60_000;
+const accessCache = new Map<string, { state: AccessState; expiresAt: number }>();
+
+export function touchAccessCache(userId: string): void {
+  accessCache.delete(userId);
 }
 
 export async function hasAccess(userId: string): Promise<boolean> {
@@ -146,6 +164,9 @@ export async function cancelSubscription(userId: string) {
   return prisma.subscription.update({
     where: { id: sub.id },
     data: { cancelAtPeriodEnd: true },
+  }).then((updated) => {
+    touchAccessCache(userId);
+    return updated;
   });
 }
 
@@ -193,6 +214,11 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string) {
           where: { stripeSubscriptionId: subscriptionId },
           data: { status: 'PAST_DUE' },
         });
+        const affected = await prisma.subscription.findMany({
+          where: { stripeSubscriptionId: subscriptionId },
+          select: { userId: true },
+        });
+        affected.forEach((a) => touchAccessCache(a.userId));
         logger.warn({ subscriptionId }, 'Payment failed, marked PAST_DUE');
       }
       break;
@@ -203,6 +229,11 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string) {
         where: { stripeSubscriptionId: stripeSub.id },
         data: { status: 'EXPIRED', cancelAtPeriodEnd: false },
       });
+      const affected = await prisma.subscription.findMany({
+        where: { stripeSubscriptionId: stripeSub.id },
+        select: { userId: true },
+      });
+      affected.forEach((a) => touchAccessCache(a.userId));
       logger.info({ subscriptionId: stripeSub.id }, 'Subscription deleted, marked EXPIRED');
       break;
     }
@@ -243,6 +274,7 @@ async function activatePaidSubscription(userId: string, plan: PlanId, stripeSub:
       stripeSubscriptionId: stripeSub.id,
     },
   });
+  touchAccessCache(userId);
 }
 
 export { ACTIVE_STATUSES };

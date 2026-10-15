@@ -182,65 +182,76 @@ router.post(
         },
       });
 
+      // Hand off to a cutter without holding the HTTP request open:
+      // the Rust worker answers synchronously when present, otherwise the
+      // Node queue worker picks the job up within ~1s. Bound the whole
+      // handoff so the client always gets a fast 202 + status polling.
       const jobId = uuidv4();
-
-      try {
-        const rustWorkerUrl = process.env.RUST_WORKER_URL || 'http://localhost:3003';
-        const rustResponse = await fetch(`${rustWorkerUrl}/api/clips/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clipId: clip.id,
-            filePath: file.path,
-            startTime,
-            endTime,
-          }),
-        });
-
-        if (rustResponse.ok) {
-          const result = await rustResponse.json() as { url?: string; thumbnail?: string };
-          await prisma.clip.update({
-            where: { id: clip.id },
-            data: {
-              status: 'COMPLETED',
-              videoUrl: result.url ?? null,
-              thumbnail: result.thumbnail ?? null,
-            },
-          });
-          logger.info({ clipId: clip.id, jobId }, 'Clip generated via Rust worker');
-        } else {
-          throw new Error('Rust worker failed');
-        }
-      } catch (rustError) {
-        logger.warn({ rustError, clipId: clip.id }, 'Rust worker not available, using queue');
+      const handoff = (async () => {
         try {
-          await queueService.addClipGenerationJob({
-            fileId,
-            filePath: file.path,
-            startTime,
-            endTime,
-            userId: req.user!.userId,
-            clipId: clip.id,
+          const rustWorkerUrl = process.env.RUST_WORKER_URL || 'http://localhost:3003';
+          const rustResponse = await fetch(`${rustWorkerUrl}/api/clips/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(2500),
+            body: JSON.stringify({
+              clipId: clip.id,
+              filePath: file.path,
+              startTime,
+              endTime,
+            }),
           });
-        } catch (queueError) {
-          logger.warn({ queueError }, 'Queue unavailable, clip will be processed async');
+
+          if (rustResponse.ok) {
+            const result = await rustResponse.json() as { url?: string; thumbnail?: string };
+            await prisma.clip.update({
+              where: { id: clip.id },
+              data: {
+                status: 'COMPLETED',
+                videoUrl: result.url ?? null,
+                thumbnail: result.thumbnail ?? null,
+              },
+            });
+            logger.info({ clipId: clip.id, jobId }, 'Clip generated via Rust worker');
+            return;
+          }
+          throw new Error('Rust worker failed');
+        } catch (rustError) {
+          logger.info({ clipId: clip.id }, 'Cutting via queue worker');
+          try {
+            await queueService.addClipGenerationJob({
+              fileId,
+              filePath: file.path,
+              startTime,
+              endTime,
+              userId: req.user!.userId,
+              clipId: clip.id,
+            });
+          } catch (queueError) {
+            logger.warn({ queueError }, 'Queue unavailable, clip will be processed async');
+          }
         }
-      }
+      })();
 
-      const updatedClip = await prisma.clip.findUnique({
-        where: { id: clip.id },
-        include: {
-          file: {
-            select: {
-              id: true,
-              name: true,
-              originalName: true,
-            },
-          },
+      // Wait briefly so the fast (Rust) path can complete inline; the queue
+      // path resolves in the background while the client polls clip status.
+      await Promise.race([
+        handoff,
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
+      handoff.catch(() => undefined);
+
+      // Return the created row directly (one less Neon round trip); the
+      // client polls GET /clips/:id for the finished videoUrl/thumbnail.
+      res.status(202).json({
+        clip: {
+          ...clip,
+          startTime: Number(clip.startTime),
+          endTime: Number(clip.endTime),
+          file: { id: file.id, name: file.name, originalName: file.originalName },
         },
+        jobId,
       });
-
-      res.json({ clip: updatedClip, jobId });
     } catch (error) {
       next(error);
     }

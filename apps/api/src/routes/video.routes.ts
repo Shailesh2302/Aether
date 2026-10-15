@@ -13,17 +13,44 @@ const requireOwnedFile = async (fileId: unknown, userId: string): Promise<boolea
   return Boolean(file);
 };
 
+type FileMeta = Record<string, unknown>;
+
+const getFileMeta = async (fileId: string, userId: string): Promise<{ id: string; meta: FileMeta } | null> => {
+  const file = await prisma.file.findFirst({
+    where: { id: fileId, userId },
+    select: { id: true, metadata: true },
+  });
+  if (!file) return null;
+  return { id: file.id, meta: ((file.metadata as FileMeta | null) ?? {}) };
+};
+
+const saveFileMeta = async (fileId: string, meta: FileMeta): Promise<void> => {
+  await prisma.file.update({
+    where: { id: fileId },
+    data: { metadata: meta as Record<string, string | number | boolean | object> },
+  }).catch(() => undefined);
+};
+
 router.post(
   '/summary',
   authenticate,
   requireSubscription,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { fileId } = req.body;
+      const { fileId, refresh } = req.body;
       const userId = req.user!.userId;
 
-      if (!(await requireOwnedFile(fileId, userId))) {
+      const owned = await getFileMeta(fileId, userId);
+      if (!owned) {
         return res.status(404).json({ error: 'File not found' });
+      }
+
+      // Summaries are deterministic per transcript - serve the cached copy
+      // so repeat visits return instantly instead of re-running the LLM.
+      const cached = owned.meta.videoSummary as Record<string, unknown> | undefined;
+      if (!refresh && cached && typeof cached.summary === 'string' && cached.summary.length > 0) {
+        res.setHeader('X-Cache', 'HIT');
+        return res.json({ file_id: fileId, ...cached });
       }
 
       logger.info(`Generating video summary: fileId=${fileId}, userId=${userId}`);
@@ -41,7 +68,11 @@ router.post(
         throw new Error(`AI service error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as Record<string, unknown>;
+      if (typeof data.summary === 'string' && data.summary.length > 0) {
+        const freshMeta: FileMeta = { ...owned.meta, videoSummary: { ...data, cachedAt: new Date().toISOString() } };
+        await saveFileMeta(fileId, freshMeta);
+      }
       res.json(data);
     } catch (error) {
       logger.error({ error }, 'Error generating video summary');
@@ -153,11 +184,20 @@ router.post(
   requireSubscription,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { fileId, maxClips = 5 } = req.body;
+      const { fileId, maxClips = 5, refresh } = req.body;
       const userId = req.user!.userId;
 
-      if (!(await requireOwnedFile(fileId, userId))) {
+      const owned = await getFileMeta(fileId, userId);
+      if (!owned) {
         return res.status(404).json({ error: 'File not found' });
+      }
+
+      // Highlight detection is the slowest step in clipping - reuse the
+      // cached set when it already covers the requested count.
+      const cached = owned.meta.smartClips as { clips?: unknown[] } | undefined;
+      if (!refresh && Array.isArray(cached?.clips) && (cached?.clips?.length ?? 0) >= Number(maxClips)) {
+        res.setHeader('X-Cache', 'HIT');
+        return res.json({ file_id: fileId, clips: cached.clips!.slice(0, Number(maxClips)) });
       }
 
       logger.info(`Generating smart clips: fileId=${fileId}, maxClips=${maxClips}`);
@@ -176,7 +216,16 @@ router.post(
         throw new Error(`AI service error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { clips?: unknown[] };
+      if (Array.isArray(data.clips) && data.clips.length > 0) {
+        const existing = Array.isArray(cached?.clips) ? cached!.clips! : [];
+        const merged = [...existing, ...data.clips.filter((c) => !existing.some((e) => JSON.stringify(e) === JSON.stringify(c)))];
+        const freshMeta: FileMeta = {
+          ...owned.meta,
+          smartClips: { clips: merged.slice(0, 20), cachedAt: new Date().toISOString() },
+        };
+        await saveFileMeta(fileId, freshMeta);
+      }
       res.json(data);
     } catch (error) {
       logger.error({ error }, 'Error generating smart clips');

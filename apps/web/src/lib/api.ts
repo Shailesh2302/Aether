@@ -525,6 +525,12 @@ export const clipsApi = {
     return data.clips ?? [];
   },
 
+  async get(id: string): Promise<Clip> {
+    const { data } = await api.get<{ clip: Clip } | Clip>(`/clips/${id}`);
+    if ("clip" in data) return data.clip;
+    return data;
+  },
+
   async create(payload: {
     fileId: string;
     startTime: number;
@@ -553,6 +559,17 @@ export const clipsApi = {
   async delete(id: string) {
     const { data } = await api.delete(`/clips/${id}`);
     return data;
+  },
+
+  /** Poll until a generated clip finishes cutting (or fails/times out). */
+  async waitUntilReady(id: string, timeoutMs = 120_000): Promise<Clip> {
+    const start = Date.now();
+    for (;;) {
+      const clip = await clipsApi.get(id);
+      if (clip.status === "COMPLETED" || clip.status === "FAILED") return clip;
+      if (Date.now() - start > timeoutMs) return clip;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
   },
 };
 

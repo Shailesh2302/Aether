@@ -1,4 +1,54 @@
+# Production deployment (Render free tier only allows public web services).
+#
+# Architecture actually deployed:
+#   aether-qdrant : Qdrant (public web service, secured by QDRANT__SERVICE__API_KEY)
+#   aether-ai     : FastAPI (repo docker, apps/ai-service)
+#   aether-api    : Express (repo docker, apps/api) + Node queue worker in-container
+#
+# There is NO Redis: the API degrades gracefully and processes
+# uploads/clips inline in the background (see processing.service.ts).
+# There is NO separate Rust worker service on the free tier.
+
 services:
+  - type: web
+    name: aether-qdrant
+    runtime: image
+    imagePath: qdrant/qdrant:v1.7.4
+    plan: free
+    region: oregon
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: QDRANT__STORAGE__STORAGE_PATH
+        value: /qdrant/storage
+      - key: QDRANT__SERVICE__API_KEY
+        sync: false # generate with: openssl rand -hex 24; same value goes to API + AI
+
+  - type: web
+    name: aether-ai
+    runtime: docker
+    rootDir: apps/ai-service
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: QDRANT_HOST
+        value: https://aether-qdrant.onrender.com
+      - key: QDRANT_PORT
+        value: 443
+      - key: QDRANT_API_KEY
+        sync: false # same value as aether-qdrant
+      - key: WHISPER_MODEL
+        value: tiny
+      - key: WHISPER_DEVICE
+        value: cpu
+
   - type: web
     name: aether-api
     runtime: docker
@@ -12,39 +62,25 @@ services:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 3001
+        value: 10000
       - key: POSTGRES_URL
-        sync: false
+        sync: false # Neon pooled URL
       - key: POSTGRES_DIRECT_URL
-        sync: false
-      - key: REDIS_URL
-        sync: false
-      - key: REDIS_HOST
-        sync: false
-      - key: REDIS_PORT
-        sync: false
-      - key: REDIS_PASSWORD
-        sync: false
+        sync: false # Neon direct URL (for prisma migrate deploy)
       - key: QDRANT_HOST
-        sync: false
+        value: https://aether-qdrant.onrender.com
       - key: QDRANT_PORT
-        value: 6333
+        value: 443
       - key: QDRANT_API_KEY
-        sync: false
+        sync: false # same value as aether-qdrant
       - key: AI_SERVICE_URL
-        value: https://aether-ai.onrender.com
+        value: https://aether-ai.onrender.com # replace with actual AI service URL
       - key: NVIDIA_API_KEY
         sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRY
         value: 7d
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-      - key: APP_URL
-        value: https://aether-web.vercel.app
       - key: STORAGE_TYPE
         value: cloudinary
       - key: CLOUDINARY_CLOUD_NAME
@@ -56,47 +92,12 @@ services:
       - key: CLOUDINARY_UPLOAD_PRESET
         value: aether
       - key: CORS_ORIGIN
-        value: https://aether-web.vercel.app
+        value: https://aether-web.vercel.app # replace with actual Vercel URL
+      - key: APP_URL
+        value: https://aether-web.vercel.app # replace with actual Vercel URL
       - key: LOG_LEVEL
         value: info
-
-  - type: web
-    name: aether-ai
-    runtime: docker
-    rootDir: apps/ai-service
-    dockerfilePath: ./Dockerfile
-    plan: free
-    region: oregon
-    healthCheckPath: /api/v1/health
-    autoDeploy: true
-    envVars:
-      - key: NVIDIA_API_KEY
-        sync: false
-      - key: QDRANT_HOST
-        sync: false
-      - key: QDRANT_PORT
-        value: 6333
-      - key: QDRANT_API_KEY
-        sync: false
-      - key: WHISPER_MODEL
-        value: tiny
-      - key: WHISPER_DEVICE
-        value: cpu
-      - key: SENTENCE_TRANSFORMER_MODEL
-        value: sentence-transformers/all-MiniLM-L6-v2
-
-  - type: worker
-    name: aether-worker
-    runtime: docker
-    rootDir: apps/rust-worker
-    dockerfilePath: ./Dockerfile
-    plan: free
-    region: oregon
-    autoDeploy: true
-    envVars:
-      - key: REDIS_URL
-        sync: false
-      - key: STORAGE_PATH
-        value: /tmp/aether
-      - key: RUST_LOG
-        value: info
+      - key: STRIPE_SECRET_KEY
+        sync: false # optional; trials work without it
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false # optional

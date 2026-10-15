@@ -63,7 +63,7 @@ git push origin main
 3. **Root Directory**: set to `apps/web`
 4. **Framework Preset**: Next.js (auto-detected)
 5. **Environment Variables** — add:
-   - `NEXT_PUBLIC_API_URL` = `https://aether-api.onrender.com` (use the Render URL from step below)
+    - `NEXT_PUBLIC_API_URL` = `https://aether-api.onrender.com/api` (use the Render URL from step below **with the `/api` suffix** — without it every API call 404s)
 6. Click **Deploy**
 
 ### Option B: Vercel CLI
@@ -138,7 +138,7 @@ Open the Vercel URL in a browser — you should be able to log in, upload files,
 2. **AI service memory**: 512 MB is tight. We pin `WHISPER_MODEL=tiny` and disable any heavy local embeddings. If you need transcription quality, upgrade the AI service to Render's Starter plan ($7/mo).
 3. **Worker stops on free tier**: The Rust worker may stop when idle. Re-deploy manually or upgrade.
 4. **No persistent disk on free Render web services**: Files in `./storage/` are lost on redeploy. Use Cloudinary (`STORAGE_TYPE=cloudinary`) for uploads.
-5. **API URL in web app**: Vercel needs the Render URL at build time. Update `NEXT_PUBLIC_API_URL` and redeploy Vercel after the API is up.
+5. **API URL in web app**: Vercel needs the Render URL at build time **including the `/api` suffix** (e.g. `https://aether-api.onrender.com/api`). Update `NEXT_PUBLIC_API_URL` and redeploy Vercel after the API is up.
 
 ## Production hardening (later)
 

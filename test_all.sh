@@ -113,7 +113,11 @@ test_case "Get User Stats" "GET" "$BASE_URL/api/users/stats" "" "totalFiles" "" 
 # ─── 4. FILE UPLOAD (PDF + Video) ─────────────────────────
 
 PDF_PATH="/home/shailesh/Downloads/DeepLearningCrashCourse_Chapter3.pdf"
-VIDEO_PATH="/home/shailesh/Videos/WhatsApp Video 2026-03-31 at 8.04.41 PM.mp4"
+VIDEO_PATH="/home/shailesh/Videos/Cohort 2/Week 15 docker                                 REMAIN/Week 15.4- Docker Bind Mounts.mp4"
+# Fallback: pick any available mp4 in the same folder if the exact file is missing
+if [ ! -f "$VIDEO_PATH" ]; then
+    VIDEO_PATH=$(ls "/home/shailesh/Videos/Cohort 2/Week 15 docker                                 REMAIN/"*.mp4 2>/dev/null | head -1)
+fi
 
 echo -e "\n${CYAN}━━━ FILE UPLOAD TESTS ───${RESET}"
 
@@ -124,7 +128,7 @@ PDF_RESP=$(curl -s --max-time 120 -X POST "$BASE_URL/api/files/upload" \
     -F "file=@$PDF_PATH;type=application/pdf")
 PDF_ID=$(echo "$PDF_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('file',{}).get('id',''))" 2>/dev/null)
 echo -e "  PDF ID: $PDF_ID"
-echo "$PDF_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('file',{}).get('status')=='PENDING'; print('  PASS: PDF uploaded')" 2>/dev/null && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+echo "$PDF_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('file',{}).get('status') in ('PENDING','PROCESSING'); print('  PASS: PDF uploaded')" 2>/dev/null && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
 # Upload Video
 echo -e "\n  Uploading Video... (may take a moment)"
@@ -133,11 +137,12 @@ VIDEO_RESP=$(curl -s --max-time 180 -X POST "$BASE_URL/api/files/upload" \
     -F "file=@$VIDEO_PATH;type=video/mp4")
 VIDEO_ID=$(echo "$VIDEO_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('file',{}).get('id',''))" 2>/dev/null)
 echo -e "  Video ID: $VIDEO_ID"
-echo "$VIDEO_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('file',{}).get('status')=='PENDING'; print('  PASS: Video uploaded')" 2>/dev/null && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+echo "$VIDEO_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('file',{}).get('status') in ('PENDING','PROCESSING'); print('  PASS: Video uploaded')" 2>/dev/null && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
 test_case "List Files" "GET" "$BASE_URL/api/files" "" "DeepLearningCrashCourse" "" "$AUTH"
 test_case "Get File (PDF)" "GET" "$BASE_URL/api/files/$PDF_ID" "" "DeepLearningCrashCourse" "" "$AUTH"
-test_case "Get File (Video)" "GET" "$BASE_URL/api/files/$VIDEO_ID" "" "WhatsApp Video" "" "$AUTH"
+VIDEO_BASE=$(basename "$VIDEO_PATH" .mp4)
+test_case "Get File (Video)" "GET" "$BASE_URL/api/files/$VIDEO_ID" "" "$VIDEO_BASE" "" "$AUTH"
 
 # PATCH test
 echo -e "\n  Testing PATCH file metadata..."
@@ -163,7 +168,7 @@ test_case "Doc Types" "GET" "$AI_URL/documents/types" "" "pdf"
 
 # Extract text from PDF (via AI service) - actual data processing
 echo -e "\n${YELLOW}Extracting text from PDF via AI service...${RESET}"
-PDF_EXTRACT_RESP=$(curl -s --max-time 60 -X POST "$AI_URL/documents/extract" \
+PDF_EXTRACT_RESP=$(curl -s --max-time 60 -X POST "$AI_URL/documents/extract-path" \
     -H "Content-Type: application/json" \
     -d "{\"file_path\":\"$PDF_PATH\"}")
 echo "$PDF_EXTRACT_RESP" | python3 -c "

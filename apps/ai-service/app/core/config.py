@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     NVIDIA_API_KEY: str = ""
     NVIDIA_BASE_URL: str = "https://openrouter.ai/api/v1"
-    NVIDIA_CHAT_MODEL: str = "stealth/ox-alpha"
+    NVIDIA_CHAT_MODEL: str = "openai/gpt-4o-mini"
     NVIDIA_EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536
     LLM_MAX_TOKENS: int = 2048

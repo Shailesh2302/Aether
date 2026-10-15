@@ -113,6 +113,25 @@ class VectorService {
     }
   }
 
+  private async fetchWithRetry(url: string, init: RequestInit, attempts = 2): Promise<Response> {
+    let lastError: unknown;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const res = await fetch(url, init);
+        // Retry once on transient Qdrant availability errors
+        if (res.status >= 500 && i < attempts - 1) {
+          await new Promise((r) => setTimeout(r, 300));
+          continue;
+        }
+        return res;
+      } catch (err) {
+        lastError = err;
+        if (i < attempts - 1) await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('fetch failed');
+  }
+
   async searchPoints(
     collection: string,
     vector: number[],
@@ -138,7 +157,7 @@ class VectorService {
         };
       }
 
-      const response = await fetch(`${this.baseUrl}/collections/${collection}/points/query`, {
+      const response = await this.fetchWithRetry(`${this.baseUrl}/collections/${collection}/points/query`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(body),

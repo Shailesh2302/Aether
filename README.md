@@ -75,6 +75,7 @@ PostgreSQL  Redis  Qdrant
 
 ## Documentation
 
+- [Current System Architecture](docs/architecture/current-system.md)
 - [Architecture Overview](docs/architecture/overview.md)
 - [Component Details](docs/architecture/components.md)
 - [API Reference](docs/api/)

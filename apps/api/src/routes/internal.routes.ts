@@ -59,6 +59,40 @@ router.post(
   }
 );
 
+/**
+ * Split raw transcript text into retrieval-sized chunks. Handles both
+ * paragraph-separated documents and plain ASR output with no newlines
+ * (sentence-boundary packing under a character budget).
+ */
+function chunkTranscript(text: string, maxLen = 900): string[] {
+  const paragraphs = text
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length > 1) {
+    return paragraphs;
+  }
+
+  const sentences = text
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?。？！])\s+/)
+    .filter((sn) => sn.trim());
+
+  const out: string[] = [];
+  let buf = '';
+  for (const sn of sentences) {
+    if ((buf + ' ' + sn).trim().length > maxLen && buf) {
+      out.push(buf.trim());
+      buf = sn;
+    } else {
+      buf = (buf + ' ' + sn).trim();
+    }
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.length > 0 ? out : [text];
+}
+
 router.post(
   '/search/index',
   async (req: Request, res: Response, next: NextFunction) => {
@@ -75,10 +109,7 @@ router.post(
       }
 
       const collectionName = `user_${userId}`.replace(/-/g, '_');
-      const chunks = String(text)
-        .split('\n\n')
-        .filter((chunk: string) => chunk.trim())
-        .slice(0, 500); // cap runaway transcripts
+      const chunks = chunkTranscript(String(text)).slice(0, 500);
 
       if (chunks.length === 0) {
         return res.status(400).json({ error: 'No valid chunks to index' });

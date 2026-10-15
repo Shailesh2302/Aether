@@ -46,7 +46,22 @@ export default function VideoTopicsPage() {
     setDetecting(true);
     try {
       const response = await api.get("/video/topics", { params: { fileId } });
-      setTopics(response.data.topics);
+      const raw = response.data.topics;
+      const list: string[] = Array.isArray(raw) ? raw : [];
+      // Backend normalizes to objects; tolerate legacy string arrays too.
+      const normalized: VideoTopic[] = list.map((t, i) =>
+        typeof t === "string"
+          ? { topic: t, timestamp_sec: 0, keywords: [], relevance_score: 0.8 }
+          : {
+              topic: String((t as VideoTopic).topic ?? `Topic ${i + 1}`),
+              timestamp_sec: Number((t as VideoTopic).timestamp_sec) || 0,
+              keywords: Array.isArray((t as VideoTopic).keywords)
+                ? (t as VideoTopic).keywords
+                : [],
+              relevance_score: Number((t as VideoTopic).relevance_score) || 0,
+            }
+      );
+      setTopics(normalized);
     } catch (error) {
       console.error("Failed to detect topics:", error);
     } finally {

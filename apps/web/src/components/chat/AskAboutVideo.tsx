@@ -5,6 +5,7 @@ import { Send, Loader2, MessageSquare, Play, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { getToken } from "@/lib/api";
 
 interface Message {
   id: string;
@@ -25,9 +26,19 @@ function parseSSEStream(chunk: string): string {
   const lines = chunk.split("\n");
   for (const line of lines) {
     if (line.startsWith("data: ")) {
-      const data = line.slice(6);
-      if (data !== "[DONE]") {
-        result += data;
+      const data = line.slice(6).trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        const parsed = JSON.parse(data);
+        if (typeof parsed.content === "string") {
+          result += parsed.content;
+        } else if (typeof parsed.message === "string") {
+          result += parsed.message;
+        } else if (typeof parsed.text === "string") {
+          result += parsed.text;
+        }
+      } catch {
+        // Non-JSON payload (e.g. session id) - ignore.
       }
     }
   }
@@ -75,7 +86,7 @@ export function AskAboutVideo({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${getToken() || ""}`,
         },
         body: JSON.stringify({
           fileId,

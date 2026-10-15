@@ -56,6 +56,16 @@ router.post(
   }
 );
 
+router.post('/logout', authenticate, async (_req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    // Stateless JWT: nothing to revoke server-side; acknowledge so clients
+    // can clear local session state without hitting a 404.
+    res.json({ success: true, message: 'Logged out successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/me', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const user = await authService.getUserById(req.user!.userId);

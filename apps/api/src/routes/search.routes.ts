@@ -42,13 +42,34 @@ async function semanticSearch(
       limit
     );
 
+    const fileIds = [...new Set(results.map((r) => String((r.payload as Record<string, unknown>).file_id ?? '')))].filter(Boolean);
+    const files = fileIds.length > 0
+      ? await prisma.file.findMany({
+          where: { id: { in: fileIds }, userId },
+          select: { id: true, name: true, originalName: true, mimeType: true },
+        })
+      : [];
+    const fileById = new Map(files.map((f) => [f.id, f]));
+
     return {
-      results: results.map((r) => ({
-        id: r.id,
-        text: r.payload.text,
-        score: r.score,
-        metadata: r.payload.metadata || {},
-      })),
+      results: results.map((r) => {
+        const payload = r.payload as Record<string, unknown>;
+        const meta = (payload.metadata as Record<string, unknown>) ?? {};
+        const fid = String(payload.file_id ?? '');
+        const file = fileById.get(fid);
+        const text = String(payload.text ?? '');
+        return {
+          id: r.id,
+          fileId: fid,
+          fileName: file?.originalName ?? file?.name ?? String(payload.fileName ?? ''),
+          snippet: text.slice(0, 280),
+          text,
+          score: r.score,
+          timestamp: typeof meta.start_sec === 'number' ? meta.start_sec : undefined,
+          mimeType: file?.mimeType,
+          metadata: meta,
+        };
+      }),
       query,
     };
   } catch (error) {
@@ -58,6 +79,9 @@ async function semanticSearch(
     return {
       results: [{
         id: 'ai-generated',
+        fileId: '',
+        fileName: '',
+        snippet: aiResponse.slice(0, 280),
         text: aiResponse,
         score: 1.0,
         metadata: { source: 'ai' },

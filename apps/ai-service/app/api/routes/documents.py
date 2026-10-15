@@ -91,6 +91,34 @@ async def extract_document(
         raise HTTPException(status_code=500, detail="Failed to extract document")
 
 
+class DocumentExtractPathRequest(BaseModel):
+    file_path: str
+    mime_type: Optional[str] = None
+
+
+@router.post("/documents/extract-path", response_model=DocumentExtractResponse)
+async def extract_document_by_path(
+    request: DocumentExtractPathRequest,
+    api_key: API_KEY_DEP = None,
+) -> DocumentExtractResponse:
+    """Extract text from a file already on the server's filesystem."""
+    safe_path = validate_readable_path(request.file_path)
+    try:
+        result = await document_service.extract(safe_path, request.mime_type)
+        return DocumentExtractResponse(
+            text=result.text,
+            chunks=result.chunks,
+            metadata=result.metadata,
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        app_logger.error(f"Error extracting document by path: {e}")
+        raise HTTPException(status_code=500, detail="Failed to extract document")
+
+
 class DocumentIndexRequest(BaseModel):
     file_id: str
     file_path: str

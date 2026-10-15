@@ -49,7 +49,7 @@ export interface EmbeddingResponse {
 class AIService {
   private baseUrl = process.env.AI_BASE_URL || 'https://openrouter.ai/api/v1';
   private apiKey: string;
-  private model = process.env.AI_CHAT_MODEL || 'stealth/ox-alpha';
+  private model = process.env.AI_CHAT_MODEL || 'openai/gpt-4o-mini';
   private embeddingModel = process.env.AI_EMBEDDING_MODEL || 'openai/text-embedding-3-small';
   private defaultTemperature = 0.6;
   private defaultTopP = 0.95;

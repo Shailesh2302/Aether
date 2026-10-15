@@ -39,8 +39,13 @@ router.post(
         throw new Error(`AI service error: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      res.json(data);
+      const data: any = await response.json();
+      // AI service emits `summary`; the web UI expects `description`
+      const moments = (data.moments || []).map((m: Record<string, unknown>) => ({
+        ...m,
+        description: m.description ?? m.summary ?? '',
+      }));
+      res.json({ ...data, moments });
     } catch (error) {
       logger.error({ error }, 'Error detecting moments');
       next(error);
@@ -75,8 +80,13 @@ router.post(
         throw new Error(`AI service error: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      res.json(data);
+      const data: any = await response.json();
+      const highlights = (data.highlights || []).map((h: Record<string, unknown>) => ({
+        ...h,
+        description: h.description ?? h.summary ?? h.reason ?? '',
+        title: h.title ?? (typeof h.summary === 'string' ? h.summary.slice(0, 60) : ''),
+      }));
+      res.json({ ...data, highlights });
     } catch (error) {
       logger.error({ error }, 'Error generating highlights');
       next(error);
@@ -109,8 +119,28 @@ router.get(
         throw new Error(`AI service error: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      res.json(data);
+      const data = await response.json() as Record<string, unknown>;
+      // Normalize to the shape the web UI renders:
+      // [{ topic, timestamp_sec, keywords, relevance_score }].
+      // The AI service returns { topics: string[], summary, key_themes }.
+      const rawTopics: unknown[] = Array.isArray(data.topics)
+        ? data.topics as unknown[]
+        : [];
+      const topics = rawTopics
+        .map((t, i) => {
+          if (typeof t === 'string') {
+            return { topic: t, timestamp_sec: 0, keywords: [], relevance_score: 0.8 };
+          }
+          const o = t as Record<string, unknown>;
+          return {
+            topic: String(o.topic ?? o.name ?? o.title ?? `Topic ${i + 1}`),
+            timestamp_sec: typeof o.timestamp_sec === 'number' ? o.timestamp_sec : 0,
+            keywords: Array.isArray(o.keywords) ? o.keywords as string[] : [],
+            relevance_score: typeof o.relevance_score === 'number' ? o.relevance_score : 0.8,
+          };
+        })
+        .filter((t) => t.topic);
+      res.json({ ...data, topics });
     } catch (error) {
       logger.error({ error }, 'Error detecting topics');
       next(error);

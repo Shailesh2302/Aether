@@ -27,8 +27,16 @@ router.post(
   validateRequest,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { message, sessionId, fileId } = req.body;
+      const { message, sessionId } = req.body;
       const userId = req.user!.userId;
+      // Accept both `fileId` (string) and `fileIds` (string[]) for scoping.
+      const rawIds = req.body.fileIds ?? req.body.fileId;
+      const fileIds: string[] = Array.isArray(rawIds)
+        ? rawIds.filter((id) => typeof id === 'string' && id.length > 0)
+        : typeof rawIds === 'string' && rawIds.length > 0
+          ? [rawIds]
+          : [];
+      const fileId: string | undefined = fileIds[0];
 
       let session = null;
       if (sessionId) {
@@ -64,8 +72,8 @@ router.post(
         const collectionName = `user_${userId}`.replace(/-/g, '_');
         
         let filterConditions: Record<string, unknown> | undefined;
-        if (fileId) {
-          filterConditions = { file_id: fileId };
+        if (fileIds.length === 1) {
+          filterConditions = { file_id: fileIds[0] };
         }
 
         const searchResults = await vectorService.searchPoints(
@@ -76,11 +84,15 @@ router.post(
           filterConditions
         );
 
-        if (searchResults.length > 0) {
-          context = searchResults
+        const scoped = fileIds.length > 1
+          ? searchResults.filter((r) => fileIds.includes(String((r.payload as Record<string, unknown>).file_id)))
+          : searchResults;
+
+        if (scoped.length > 0) {
+          context = scoped
             .map((r) => r.payload.text as string)
             .join('\n\n');
-          sources.push(...searchResults.map((r) => ({
+          sources.push(...scoped.map((r) => ({
             text: r.payload.text as string,
             score: r.score,
             fileId: r.payload.file_id as string,

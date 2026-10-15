@@ -84,6 +84,7 @@ export interface UserStats {
   totalClips: number;
   totalSessions: number;
   storageUsed: number;
+  fileTypes?: Record<string, number>;
 }
 
 export type FileStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -238,7 +239,9 @@ export interface HighlightsResponse {
 export interface TopicsResponse {
   file_id: string;
   topics: VideoTopic[];
-  total_duration_sec: number;
+  total_duration_sec?: number;
+  summary?: string;
+  key_themes?: string[];
 }
 
 export interface SmartClipsResponse {
@@ -296,7 +299,8 @@ export const authApi = {
   },
 
   async me() {
-    const { data } = await api.get<User>("/auth/me");
+    const { data } = await api.get<{ user: User } | User>("/auth/me");
+    if ("user" in data) return data.user;
     return data;
   },
 };
@@ -307,17 +311,20 @@ export const authApi = {
 
 export const userApi = {
   async getProfile() {
-    const { data } = await api.get<User>("/users/profile");
+    const { data } = await api.get<{ user: User } | User>("/users/profile");
+    if ("user" in data) return data.user;
     return data;
   },
 
   async updateProfile(payload: { name?: string; email?: string; avatar?: string }) {
-    const { data } = await api.put<User>("/users/profile", payload);
+    const { data } = await api.put<{ user: User } | User>("/users/profile", payload);
+    if ("user" in data) return data.user;
     return data;
   },
 
-  async getStats() {
-    const { data } = await api.get<UserStats>("/users/stats");
+  async getStats(): Promise<UserStats> {
+    const { data } = await api.get<UserStats | { stats: UserStats }>("/users/stats");
+    if ("stats" in data) return data.stats;
     return data;
   },
 };
@@ -423,8 +430,9 @@ export const clipsApi = {
     endTime: number;
     title: string;
     description?: string;
-  }) {
-    const { data } = await api.post<Clip>("/clips", payload);
+  }): Promise<Clip> {
+    const { data } = await api.post<{ clip: Clip } | Clip>("/clips", payload);
+    if ("clip" in data) return data.clip;
     return data;
   },
 
@@ -433,8 +441,11 @@ export const clipsApi = {
     startTime: number;
     endTime: number;
     title?: string;
-  }) {
-    const { data } = await api.post("/clips/generate", payload);
+  }): Promise<{ clip: Clip; jobId: string }> {
+    const { data } = await api.post<{ clip: Clip; jobId: string }>(
+      "/clips/generate",
+      payload
+    );
     return data;
   },
 

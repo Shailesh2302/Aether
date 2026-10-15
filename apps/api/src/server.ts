@@ -133,14 +133,19 @@ async function startServer() {
     logger.info('Database connected');
 
     // Auto-recovery: files left in PROCESSING/PENDING by a previous crash
-    // get requeued so they never stay stuck forever.
+    // get requeued so they never stay stuck forever. Skips files that
+    // already have a queued job to avoid duplicate storms across restarts.
     try {
       const cutoff = new Date(Date.now() - 2 * 60 * 1000); // ignore fresh uploads
       const stale = await prisma.file.findMany({
-        where: { status: { in: ['PROCESSING', 'PENDING'] }, createdAt: { lt: cutoff } },
+        where: { status: { in: ['PROCESSING', 'PENDING'] }, updatedAt: { lt: cutoff } },
         select: { id: true, path: true, mimeType: true, userId: true },
       });
+      let recovered = 0;
       for (const f of stale) {
+        if (await queueService.hasQueuedJobForFile(f.id)) {
+          continue;
+        }
         const isMedia = f.mimeType.startsWith('video/') || f.mimeType.startsWith('audio/');
         if (isMedia) {
           await queueService.addVideoProcessingJob({
@@ -158,8 +163,9 @@ async function startServer() {
           });
         }
         await prisma.file.update({ where: { id: f.id }, data: { status: 'PENDING' } }).catch(() => undefined);
+        recovered++;
       }
-      if (stale.length > 0) logger.info({ recovered: stale.length }, 'Requeued stale files from previous run');
+      if (recovered > 0) logger.info({ recovered }, 'Requeued stale files from previous run');
     } catch (recoverErr) {
       logger.warn({ recoverErr }, 'Stale-file recovery scan failed');
     }

@@ -242,6 +242,23 @@ impl VideoWorker {
         fs::create_dir_all(&audio_dir).await?;
         let audio_path = format!("{}/{}.wav", audio_dir, job.id);
 
+        // Subtitle-first: embedded subs are a higher-fidelity transcript
+        // than ASR. Fall back to audio extraction + Whisper when absent.
+        let mut subtitle_transcript: Option<String> = None;
+        if let Some(subs) = crate::ffmpeg::extract_audio::extract_subtitle_text(&video_path).await {
+            info!("Using embedded subtitles as transcript ({} chars)", subs.len());
+            subtitle_transcript = Some(subs);
+        }
+
+        let transcription = if let Some(subs) = &subtitle_transcript {
+            info!("Skipping Whisper - subtitles provide the transcript");
+            subs.clone()
+        } else {
+            // No usable subtitles: proceed with audio extraction + ASR below
+            String::new()
+        };
+
+        if subtitle_transcript.is_none() {
         info!("Extracting audio from video...");
         // Videos without an audio track cannot be transcribed - finish gracefully.
         if let Err(e) = ffmpeg.extract_audio(&video_path, &audio_path).await {
@@ -268,6 +285,7 @@ impl VideoWorker {
 
         info!("Sending audio for transcription...");
         let transcription = self.send_to_transcription(&audio_path).await?;
+        }
 
         let metadata = serde_json::json!({
             "jobId": job.id,

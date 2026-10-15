@@ -203,6 +203,25 @@ class QueueService {
     return result || 0;
   }
 
+  /** True when a job referencing this file is already waiting in any queue. */
+  async hasQueuedJobForFile(fileId: string): Promise<boolean> {
+    if (!this.redis || !this.redisConnected) return false;
+    try {
+      const lists = [this.videoQueueName, this.documentQueueName, this.clipQueueName];
+      const [video, document, clip] = await this.redis.pipeline(
+        lists.map((key) => ['lrange', key, '0', '-1'] as unknown as ['lrange', string, string, string])
+      ).exec() as unknown as Array<[Error | null, string[]]>;
+      for (const [, jobs] of [video, document, clip]) {
+        for (const raw of jobs ?? []) {
+          if (typeof raw === 'string' && raw.includes(fileId)) return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   async disconnect() {
     if (this.redis) {
       await this.redis.quit();

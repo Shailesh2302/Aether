@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
@@ -12,6 +12,14 @@ import { Badge } from "@/components/ui/badge";
 import { Check, Loader2, Sparkles, ArrowLeft } from "lucide-react";
 
 export default function PricingPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading plans…</div>}>
+      <PricingContent />
+    </Suspense>
+  );
+}
+
+function PricingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const expired = searchParams.get("expired") === "1";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSubscriptionStore } from "@/store/useSubscriptionStore";
@@ -18,6 +18,14 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 export default function BillingPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading billing…</div>}>
+      <BillingContent />
+    </Suspense>
+  );
+}
+
+function BillingContent() {
   const searchParams = useSearchParams();
   const justPaid = searchParams.get("success") === "1";
   const { status, fetchStatus, cancel, isLoading } = useSubscriptionStore();

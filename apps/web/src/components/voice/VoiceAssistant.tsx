@@ -4,7 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mic, MicOff, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { filesApi, getToken, type FileItem } from "@/lib/api";
+import { getToken, type FileItem } from "@/lib/api";
+import { filesApi } from "@/lib/api";
+import { parseVoiceCommand, rankFiles } from "@/lib/voiceCommands";
+import { useAuthStore } from "@/store/useAuthStore";
 
 // Minimal Web Speech API typings (not in TS DOM lib for webkit prefix).
 interface SpeechRecognitionResult {
@@ -47,59 +50,44 @@ function speak(text: string) {
   }
 }
 
-function normalize(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+function recognitionCtor() {
+  if (typeof window === "undefined") return null;
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
-
-function scoreMatch(query: string, name: string): number {
-  const q = normalize(query);
-  const n = normalize(name);
-  if (!q) return 0;
-  if (n.includes(q)) return 100 + q.length;
-  const words = q.split(" ").filter((w) => w.length > 2);
-  if (words.length === 0) return 0;
-  const hits = words.filter((w) => n.includes(w)).length;
-  return (hits / words.length) * 90;
-}
-
-const NAV_TARGETS: Array<{ keys: string[]; href: string; label: string }> = [
-  { keys: ["dashboard", "home", "overview"], href: "/dashboard", label: "dashboard" },
-  { keys: ["upload"], href: "/upload", label: "upload page" },
-  { keys: ["search"], href: "/search", label: "search page" },
-  { keys: ["clip"], href: "/dashboard/clips", label: "clips" },
-  { keys: ["file", "library"], href: "/dashboard/files", label: "files" },
-  { keys: ["video"], href: "/dashboard/videos", label: "videos" },
-  { keys: ["chat"], href: "/dashboard/chat", label: "chat" },
-  { keys: ["setting"], href: "/dashboard/settings", label: "settings" },
-  { keys: ["billing", "subscription", "payment"], href: "/dashboard/billing", label: "billing" },
-  { keys: ["pricing", "plan", "price"], href: "/pricing", label: "pricing" },
-];
 
 export function VoiceAssistant() {
   const router = useRouter();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [transcript, setTranscript] = useState("");
   const [reply, setReply] = useState("Ask me to open a file, e.g. “open docker bind mounts”.");
   const [supported, setSupported] = useState(true);
-  const [visible, setVisible] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const recogRef = useRef<SpeechRecognitionInstance | null>(null);
-  const openRef = useRef(open);
-  openRef.current = open;
+  const phaseRef = useRef<Phase>("idle");
+  phaseRef.current = phase;
+
+  // Client-only: zustand-persist rehydrates auth from localStorage after
+  // mount, so the server render (signed-out) would mismatch a logged-in
+  // client. Render nothing until mounted to keep hydration identical.
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const visible = mounted && (isAuthenticated || !!getToken());
 
   useEffect(() => {
-    setVisible(!!getToken());
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) setSupported(false);
+    if (!recognitionCtor()) setSupported(false);
   }, []);
 
   const stopListening = useCallback(() => {
+    setPhase("idle");
     try {
       recogRef.current?.stop();
     } catch {
       // already stopped
     }
-    setPhase((p) => (p === "listening" ? "idle" : p));
   }, []);
 
   const handleCommand = useCallback(
@@ -110,36 +98,17 @@ export function VoiceAssistant() {
         return;
       }
       setPhase("working");
-      const lower = text.toLowerCase();
+      const intent = parseVoiceCommand(text);
 
-      // "go to X" navigation
-      const goMatch = lower.match(/^(go to|open page|show page)\s+(.+)$/);
-      if (goMatch) {
-        const dest = goMatch[2];
-        const target = NAV_TARGETS.find((t) => t.keys.some((k) => dest.includes(k)));
-        if (target) {
-          const msg = `Opening ${target.label}.`;
-          setReply(msg);
-          speak(msg);
-          router.push(target.href);
-          setPhase("idle");
-          return;
-        }
-      }
-
-      // "search for X" -> search page
-      const searchMatch = lower.match(/^search(\s+for)?\s+(.+)$/);
-      if (searchMatch) {
-        const q = searchMatch[2].trim();
-        const msg = `Searching for ${q}.`;
+      if (!intent) {
+        const msg = `Sorry, I didn't understand “${text}”. Try “open” plus a file name, or “go to clips”.`;
         setReply(msg);
         speak(msg);
-        router.push(`/search?q=${encodeURIComponent(q)}`);
         setPhase("idle");
         return;
       }
 
-      if (/^(help|what can you do|commands)$/.test(lower)) {
+      if (intent.type === "help") {
         const msg =
           "You can say: open, find or play followed by a file name. Or go to, followed by dashboard, upload, search, clips, files, videos, chat, settings or billing.";
         setReply(msg);
@@ -148,26 +117,36 @@ export function VoiceAssistant() {
         return;
       }
 
-      // "open/find/show/play/get/bring X" -> locate the file
-      const openMatch = lower.match(/^(open|find|show|play|get|bring)(\s+me)?\s+(.+)$/);
-      // bare file-name-ish query also tries a lookup
-      const query = openMatch ? openMatch[3].replace(/\s+(file|video|pdf|document)$/, "").trim() : lower;
+      if (intent.type === "navigate") {
+        const msg = `Opening ${intent.label}.`;
+        setReply(msg);
+        speak(msg);
+        router.push(intent.href);
+        setPhase("idle");
+        return;
+      }
 
+      if (intent.type === "search") {
+        const msg = `Searching for ${intent.q}.`;
+        setReply(msg);
+        speak(msg);
+        router.push(`/search?q=${encodeURIComponent(intent.q)}`);
+        setPhase("idle");
+        return;
+      }
+
+      // openFile
       try {
         const files: FileItem[] = await filesApi.list();
-        const ranked = files
-          .map((f) => ({ file: f, score: scoreMatch(query, f.originalName) }))
-          .filter((r) => r.score > 0)
-          .sort((a, b) => b.score - a.score);
+        const ranked = rankFiles(intent.query, files);
 
         if (ranked.length === 0) {
-          const msg = `I couldn't find anything matching ${query}.`;
+          const msg = `I couldn't find anything matching ${intent.query}.`;
           setReply(msg);
           speak(msg);
         } else {
           const best = ranked[0].file;
-          const isVideo = best.mimeType.startsWith("video/");
-          if (isVideo) {
+          if (best.mimeType.startsWith("video/")) {
             const msg = `Opening ${best.originalName}.`;
             setReply(msg);
             speak(msg);
@@ -193,7 +172,7 @@ export function VoiceAssistant() {
   );
 
   const startListening = useCallback(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SR = recognitionCtor();
     if (!SR) {
       setSupported(false);
       setReply("Voice input isn't supported in this browser. Try Chrome.");
@@ -207,29 +186,50 @@ export function VoiceAssistant() {
     const recog = new SR();
     recog.lang = "en-US";
     recog.interimResults = true;
-    recog.continuous = false;
+    // Continuous mode + auto-restart keeps listening across natural pauses
+    // instead of cutting the user off mid-sentence.
+    recog.continuous = true;
     recog.onresult = (e: SpeechRecognitionEvent) => {
       let interim = "";
-      let final = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const part = e.results[i][0]?.transcript ?? "";
-        if (e.results[i].isFinal) final += part;
-        else interim += part;
+        if (e.results[i].isFinal) {
+          const said = part.trim();
+          setTranscript(said);
+          if (said) {
+            try {
+              recog.stop();
+            } catch {
+              // stopping after a final result
+            }
+            handleCommand(said);
+            return;
+          }
+        } else {
+          interim += part;
+        }
       }
-      const combined = (final || interim).trim();
-      if (combined) setTranscript(combined);
-      if (final.trim()) handleCommand(final.trim());
+      if (interim.trim()) setTranscript(interim.trim());
     };
     recog.onerror = (e: { error: string }) => {
-      if (e.error === "not-allowed") {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         setReply("Microphone access was denied. Allow it in the browser address bar and try again.");
+        setPhase("idle");
       } else if (e.error !== "aborted" && e.error !== "no-speech") {
         setReply("I didn't catch that. Tap the mic and try again.");
+        setPhase("idle");
       }
-      setPhase("idle");
+      // "no-speech" just restarts via onend below
     };
     recog.onend = () => {
-      if (openRef.current) setPhase((p) => (p === "listening" ? "idle" : p));
+      // Chrome ends recognition on silence - resume automatically while the
+      // user still wants to talk.
+      if (phaseRef.current !== "listening") return;
+      try {
+        recog.start();
+      } catch {
+        setPhase("idle");
+      }
     };
     recogRef.current = recog;
     setTranscript("");
@@ -243,6 +243,7 @@ export function VoiceAssistant() {
 
   useEffect(() => {
     return () => {
+      setPhase("idle");
       try {
         recogRef.current?.abort();
       } catch {
@@ -304,6 +305,9 @@ export function VoiceAssistant() {
               <p className="mt-2 flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" /> Working on it…
               </p>
+            )}
+            {phase === "listening" && !transcript && (
+              <p className="mt-2 text-muted-foreground">Listening… speak now.</p>
             )}
           </div>
 

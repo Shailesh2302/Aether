@@ -65,8 +65,10 @@ export function VoiceAssistant() {
   const [supported, setSupported] = useState(true);
   const [mounted, setMounted] = useState(false);
   const recogRef = useRef<SpeechRecognitionInstance | null>(null);
-  const phaseRef = useRef<Phase>("idle");
-  phaseRef.current = phase;
+  // True while the user wants the mic hot. onend auto-restarts only then,
+  // so intentional stops (final result, close button) stay stopped.
+  const wantRef = useRef(false);
+  const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Client-only: zustand-persist rehydrates auth from localStorage after
   // mount, so the server render (signed-out) would mismatch a logged-in
@@ -82,11 +84,39 @@ export function VoiceAssistant() {
   }, []);
 
   const stopListening = useCallback(() => {
+    wantRef.current = false;
+    if (restartTimer.current) {
+      clearTimeout(restartTimer.current);
+      restartTimer.current = null;
+    }
     setPhase("idle");
     try {
       recogRef.current?.stop();
     } catch {
       // already stopped
+    }
+  }, []);
+
+  /** (Re)start the recognizer now; safe to call repeatedly. */
+  const kickRecognition = useCallback((recog: SpeechRecognitionInstance) => {
+    try {
+      recog.start();
+      return true;
+    } catch {
+      // InvalidStateError when Chrome hasn't released the mic yet -
+      // retry shortly instead of giving up (this was the 1-2s cutoff).
+      if (restartTimer.current) clearTimeout(restartTimer.current);
+      restartTimer.current = setTimeout(() => {
+        if (!wantRef.current) return;
+        try {
+          recog.start();
+        } catch {
+          wantRef.current = false;
+          setPhase("idle");
+          setReply("The microphone stopped unexpectedly. Tap the mic to try again.");
+        }
+      }, 300);
+      return false;
     }
   }, []);
 
@@ -197,6 +227,13 @@ export function VoiceAssistant() {
           const said = part.trim();
           setTranscript(said);
           if (said) {
+            // Final answer received - stand down before acting so onend
+            // doesn't restart us.
+            wantRef.current = false;
+            if (restartTimer.current) {
+              clearTimeout(restartTimer.current);
+              restartTimer.current = null;
+            }
             try {
               recog.stop();
             } catch {
@@ -213,37 +250,45 @@ export function VoiceAssistant() {
     };
     recog.onerror = (e: { error: string }) => {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        wantRef.current = false;
         setReply("Microphone access was denied. Allow it in the browser address bar and try again.");
         setPhase("idle");
-      } else if (e.error !== "aborted" && e.error !== "no-speech") {
-        setReply("I didn't catch that. Tap the mic and try again.");
+      } else if (e.error === "audio-capture") {
+        wantRef.current = false;
+        setReply("No microphone found. Check your device and try again.");
         setPhase("idle");
+      } else if (e.error === "network") {
+        wantRef.current = false;
+        setReply("The speech service is unreachable. Check your internet connection and try again.");
+        setPhase("idle");
+      } else if (e.error === "aborted" || e.error === "no-speech") {
+        // Benign: onend below restarts while the user still wants to talk.
+      } else {
+        setReply("I didn't catch that. Keep talking - I'm still listening.");
       }
-      // "no-speech" just restarts via onend below
     };
     recog.onend = () => {
-      // Chrome ends recognition on silence - resume automatically while the
-      // user still wants to talk.
-      if (phaseRef.current !== "listening") return;
-      try {
-        recog.start();
-      } catch {
-        setPhase("idle");
-      }
+      // Chrome ends recognition on silence or after ~a minute - resume
+      // automatically while the user still wants to talk.
+      if (!wantRef.current) return;
+      if (restartTimer.current) clearTimeout(restartTimer.current);
+      restartTimer.current = setTimeout(() => {
+        if (!wantRef.current) return;
+        kickRecognition(recog);
+      }, 150);
     };
     recogRef.current = recog;
     setTranscript("");
+    wantRef.current = true;
     setPhase("listening");
-    try {
-      recog.start();
-    } catch {
-      setPhase("idle");
-    }
-  }, [handleCommand]);
+    kickRecognition(recog);
+  }, [handleCommand, kickRecognition]);
 
   useEffect(() => {
     return () => {
+      wantRef.current = false;
       setPhase("idle");
+      if (restartTimer.current) clearTimeout(restartTimer.current);
       try {
         recogRef.current?.abort();
       } catch {
@@ -256,7 +301,7 @@ export function VoiceAssistant() {
 
   return (
     <>
-      {/* Floating mic button */}
+      {/* Floating mic button - opens the panel AND starts listening right away */}
       <button
         onClick={() => {
           if (!supported) {
@@ -264,7 +309,13 @@ export function VoiceAssistant() {
             setReply("Voice input isn't supported in this browser. Try Chrome.");
             return;
           }
-          setOpen((v) => !v);
+          if (open) {
+            stopListening();
+            setOpen(false);
+          } else {
+            setOpen(true);
+            startListening();
+          }
         }}
         aria-label="Voice assistant"
         className={cn(

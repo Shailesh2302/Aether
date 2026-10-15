@@ -22,9 +22,12 @@ interface SpeechRecognitionInstance {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
+  maxAlternatives: number;
   onresult: ((e: SpeechRecognitionEvent) => void) | null;
-  onerror: ((e: { error: string }) => void) | null;
+  onerror: ((e: { error: string; message?: string }) => void) | null;
   onend: (() => void) | null;
+  onsoundstart: (() => void) | null;
+  onspeechstart: (() => void) | null;
   start: () => void;
   stop: () => void;
   abort: () => void;
@@ -64,11 +67,14 @@ export function VoiceAssistant() {
   const [reply, setReply] = useState("Ask me to open a file, e.g. “open docker bind mounts”.");
   const [supported, setSupported] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [hearing, setHearing] = useState(false);
+  const [debug, setDebug] = useState("idle");
   const recogRef = useRef<SpeechRecognitionInstance | null>(null);
   // True while the user wants the mic hot. onend auto-restarts only then,
   // so intentional stops (final result, close button) stay stopped.
   const wantRef = useRef(false);
   const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cycleRef = useRef(0);
 
   // Client-only: zustand-persist rehydrates auth from localStorage after
   // mount, so the server render (signed-out) would mismatch a logged-in
@@ -90,34 +96,14 @@ export function VoiceAssistant() {
       restartTimer.current = null;
     }
     setPhase("idle");
+    setHearing(false);
+    setDebug("stopped by user");
     try {
-      recogRef.current?.stop();
+      recogRef.current?.abort();
     } catch {
       // already stopped
     }
-  }, []);
-
-  /** (Re)start the recognizer now; safe to call repeatedly. */
-  const kickRecognition = useCallback((recog: SpeechRecognitionInstance) => {
-    try {
-      recog.start();
-      return true;
-    } catch {
-      // InvalidStateError when Chrome hasn't released the mic yet -
-      // retry shortly instead of giving up (this was the 1-2s cutoff).
-      if (restartTimer.current) clearTimeout(restartTimer.current);
-      restartTimer.current = setTimeout(() => {
-        if (!wantRef.current) return;
-        try {
-          recog.start();
-        } catch {
-          wantRef.current = false;
-          setPhase("idle");
-          setReply("The microphone stopped unexpectedly. Tap the mic to try again.");
-        }
-      }, 300);
-      return false;
-    }
+    recogRef.current = null;
   }, []);
 
   const handleCommand = useCallback(
@@ -208,17 +194,50 @@ export function VoiceAssistant() {
       setReply("Voice input isn't supported in this browser. Try Chrome.");
       return;
     }
+    // Abort any zombie instance so rapid taps can't leave two recognizers
+    // fighting over the mic (one of them starves and dies in ~1s).
     try {
       recogRef.current?.abort();
     } catch {
       // first run
     }
+    if (restartTimer.current) {
+      clearTimeout(restartTimer.current);
+      restartTimer.current = null;
+    }
+    setTranscript("");
+    setHearing(false);
+    wantRef.current = true;
+    setPhase("listening");
+    setDebug("starting…");
+    spawnCycle(SR);
+  }, []);
+
+  /**
+   * Start one recognition cycle with a FRESH instance. Chrome recycles
+   * recognizers aggressively; reusing one across onend restarts is what
+   * made listening die after 1-2s. Each cycle ends -> brief pause ->
+   * next fresh cycle, until the user stops us or a final result lands.
+   */
+  function spawnCycle(SR: NonNullable<ReturnType<typeof recognitionCtor>>) {
+    if (!wantRef.current) return;
+    const cycle = ++cycleRef.current;
     const recog = new SR();
     recog.lang = "en-US";
     recog.interimResults = true;
-    // Continuous mode + auto-restart keeps listening across natural pauses
-    // instead of cutting the user off mid-sentence.
     recog.continuous = true;
+    recog.maxAlternatives = 1;
+    recogRef.current = recog;
+    setDebug(`cycle ${cycle}: started`);
+    recog.onsoundstart = () => {
+      // Mic is capturing audio - if the user never sees this, the OS mic
+      // is muted / wrong device, and no code can fix that.
+      setHearing(true);
+      setDebug(`cycle ${cycle}: hearing sound`);
+    };
+    recog.onspeechstart = () => {
+      setDebug(`cycle ${cycle}: speech detected`);
+    };
     recog.onresult = (e: SpeechRecognitionEvent) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -226,6 +245,7 @@ export function VoiceAssistant() {
         if (e.results[i].isFinal) {
           const said = part.trim();
           setTranscript(said);
+          setDebug(`cycle ${cycle}: final “${said.slice(0, 40)}”`);
           if (said) {
             // Final answer received - stand down before acting so onend
             // doesn't restart us.
@@ -234,6 +254,7 @@ export function VoiceAssistant() {
               clearTimeout(restartTimer.current);
               restartTimer.current = null;
             }
+            setHearing(false);
             try {
               recog.stop();
             } catch {
@@ -249,40 +270,60 @@ export function VoiceAssistant() {
       if (interim.trim()) setTranscript(interim.trim());
     };
     recog.onerror = (e: { error: string }) => {
+      setDebug(`cycle ${cycle}: error ${e.error}`);
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         wantRef.current = false;
+        setHearing(false);
         setReply("Microphone access was denied. Allow it in the browser address bar and try again.");
         setPhase("idle");
       } else if (e.error === "audio-capture") {
         wantRef.current = false;
+        setHearing(false);
         setReply("No microphone found. Check your device and try again.");
         setPhase("idle");
       } else if (e.error === "network") {
         wantRef.current = false;
+        setHearing(false);
         setReply("The speech service is unreachable. Check your internet connection and try again.");
         setPhase("idle");
-      } else if (e.error === "aborted" || e.error === "no-speech") {
-        // Benign: onend below restarts while the user still wants to talk.
+      } else if (e.error === "aborted" || e.error === "no-speech" || e.error === "language-not-supported") {
+        if (e.error === "language-not-supported") {
+          wantRef.current = false;
+          setReply("This browser's speech language isn't supported. Try Chrome in English.");
+          setPhase("idle");
+        }
+        // "aborted"/"no-speech" are benign: onend below starts a fresh cycle.
       } else {
         setReply("I didn't catch that. Keep talking - I'm still listening.");
       }
     };
     recog.onend = () => {
-      // Chrome ends recognition on silence or after ~a minute - resume
-      // automatically while the user still wants to talk.
-      if (!wantRef.current) return;
+      // Chrome ends a cycle on silence or after ~a minute. Start a FRESH
+      // cycle (never reuse the ended instance) while the user is still talking.
+      setHearing(false);
+      if (!wantRef.current) {
+        setDebug(`cycle ${cycle}: ended (stopped)`);
+        return;
+      }
+      setDebug(`cycle ${cycle}: ended → restarting…`);
       if (restartTimer.current) clearTimeout(restartTimer.current);
       restartTimer.current = setTimeout(() => {
         if (!wantRef.current) return;
-        kickRecognition(recog);
+        spawnCycle(SR);
       }, 150);
     };
-    recogRef.current = recog;
-    setTranscript("");
-    wantRef.current = true;
-    setPhase("listening");
-    kickRecognition(recog);
-  }, [handleCommand, kickRecognition]);
+    try {
+      recog.start();
+      setDebug(`cycle ${cycle}: live`);
+    } catch {
+      // Mic not released yet - retry this cycle once shortly.
+      if (restartTimer.current) clearTimeout(restartTimer.current);
+      restartTimer.current = setTimeout(() => {
+        if (!wantRef.current) return;
+        spawnCycle(SR);
+      }, 400);
+    }
+  }
 
   useEffect(() => {
     return () => {
@@ -358,7 +399,9 @@ export function VoiceAssistant() {
               </p>
             )}
             {phase === "listening" && !transcript && (
-              <p className="mt-2 text-muted-foreground">Listening… speak now.</p>
+              <p className="mt-2 text-muted-foreground">
+                {hearing ? "Hearing you… keep talking." : "Listening… speak now."}
+              </p>
             )}
           </div>
 
@@ -383,6 +426,9 @@ export function VoiceAssistant() {
           </button>
           <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
             Try “open docker bind mounts”, “search hot reloading”, or “go to clips”.
+          </p>
+          <p className="mt-1 font-mono text-[10px] text-muted-foreground/70">
+            mic: {debug}
           </p>
         </div>
       )}

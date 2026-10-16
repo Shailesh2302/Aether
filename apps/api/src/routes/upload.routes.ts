@@ -61,6 +61,9 @@ interface UploadedFileInfo {
   size: number;
   status: string;
   url: string | null;
+  metadata?: Record<string, unknown>;
+  thumbnailUrl?: string | null;
+  duration?: number | null;
   createdAt: Date;
 }
 
@@ -170,6 +173,9 @@ async function processUploadedFile(
     where: { id: dbFile.id },
   });
 
+  const isMedia = mimeType.startsWith('video/') || mimeType.startsWith('audio/');
+  const finalMeta = ((finalFile?.metadata as Record<string, unknown> | null) ?? undefined);
+
   return {
     id: dbFile.id,
     name: dbFile.name,
@@ -178,6 +184,10 @@ async function processUploadedFile(
     size: Number(dbFile.size),
     status: finalFile?.status || dbFile.status,
     url: dbFile.url,
+    metadata: finalMeta,
+    // Same shape as GET /api/files so library UIs render instantly.
+    thumbnailUrl: isMedia ? `/api/files/${dbFile.id}/thumbnail` : null,
+    duration: typeof finalMeta?.duration === 'number' ? (finalMeta.duration as number) : null,
     createdAt: dbFile.createdAt,
   };
 }

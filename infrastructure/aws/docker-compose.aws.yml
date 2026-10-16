@@ -1,0 +1,125 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aether
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aether -d aether"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aether-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aether-net
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    restart: unless-stopped
+    volumes:
+      - qdrantdata:/qdrant/storage
+    networks:
+      - aether-net
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      POSTGRES_URL: postgresql://aether:${POSTGRES_PASSWORD}@postgres:5432/aether
+      POSTGRES_DIRECT_URL: postgresql://aether:${POSTGRES_PASSWORD}@postgres:5432/aether
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_API_KEY: ""
+      AI_SERVICE_URL: http://ai-service:3002
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: 7d
+      STORAGE_TYPE: local
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      APP_URL: ${APP_URL}
+      LOG_LEVEL: info
+      SERVICE_API_KEY: ${SERVICE_API_KEY}
+    volumes:
+      - appstorage:/app/apps/api/storage
+    networks:
+      - aether-net
+
+  ai-service:
+    build:
+      context: ..
+      dockerfile: apps/ai-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+    environment:
+      PORT: 3002
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+      NVIDIA_BASE_URL: https://openrouter.ai/api/v1
+      NVIDIA_CHAT_MODEL: openai/gpt-4o-mini
+      NVIDIA_EMBEDDING_MODEL: openai/text-embedding-3-small
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_API_KEY: ""
+      WHISPER_MODEL: tiny
+      WHISPER_DEVICE: cpu
+    networks:
+      - aether-net
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - api
+    networks:
+      - aether-net
+
+volumes:
+  pgdata:
+  redisdata:
+  qdrantdata:
+  appstorage:
+  caddydata:
+  caddyconfig:
+
+networks:
+  aether-net:
+    driver: bridge

@@ -1,4 +1,27 @@
-# Aether — Free Cloud Deployment
+# Aether — Deployment
+
+## Recommended: AWS (all backend services) + Vercel (frontend)
+
+One `t3.micro` EC2 (free tier) in `ap-south-1` runs everything with
+`infrastructure/aws/docker-compose.aws.yml`: Postgres, Redis, Qdrant,
+API (+queue worker), AI service, and Caddy (auto-HTTPS via sslip.io —
+no domain needed, and no browser mixed-content issues).
+
+Live: API at `https://15-252-129-68.sslip.io` (Caddy → api:3001).
+
+```bash
+# provisioned with: key pair aether-ec2, SG aether-stack (22/80/443),
+# Elastic IP 15.252.129.68, instance i-0eb1c367d0e411805, 30GB gp3
+scp code.tgz ubuntu@<EIP>:/tmp/
+ssh ubuntu@<EIP>  # sudo bash /opt/aether/deploy/setup.sh
+```
+
+Secrets live in `/opt/aether/deploy/.env` on the server (never in git):
+`POSTGRES_PASSWORD`, `JWT_SECRET`, `SERVICE_API_KEY`, `NVIDIA_API_KEY`,
+`DOMAIN`, `CORS_ORIGIN`, `APP_URL`. Storage is local on the EBS volume
+(`appstorage`), so files survive restarts.
+
+## Alternative: free cloud (Vercel + Render)
 
 This project is configured to deploy to **Vercel** (frontend) and **Render** (backend) on free tiers, with **Neon Postgres**, **Redis Cloud**, and **Qdrant Cloud** as managed data services.
 

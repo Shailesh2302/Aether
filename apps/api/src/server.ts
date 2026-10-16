@@ -47,6 +47,16 @@ const app = express();
 // (thumbnails) is still enforced at the route level.
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
+  // Document previews render inside a cross-origin <iframe> on the web app.
+  // SAMEORIGIN framing headers make the browser show "refused to connect",
+  // so drop X-Frame-Options and allow the configured frontend origin.
+  frameguard: false,
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "frame-ancestors": ["'self'", config.corsOrigin],
+    },
+  },
 }));
 app.use(cors({
   origin: config.corsOrigin,

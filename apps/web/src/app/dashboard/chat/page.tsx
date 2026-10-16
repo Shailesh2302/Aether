@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@/hooks/useChat";
+import { filesApi, type FileItem } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,6 +15,8 @@ import {
   Sparkles,
   Bot,
   Loader2,
+  X,
+  FileText,
 } from "lucide-react";
 import { getInitials } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,7 +26,18 @@ export default function ChatPage() {
   const { messages, isLoading, error, sendMessage, clearMessages, clearError } =
     useChat();
   const [input, setInput] = useState("");
+  const [scopeFile, setScopeFile] = useState<FileItem | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Deep-link: /dashboard/chat?fileId=... scopes answers to that file.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("fileId");
+    if (!id) return;
+    filesApi
+      .get(id)
+      .then((f) => setScopeFile(f))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -35,7 +49,7 @@ export default function ChatPage() {
     if (!input.trim() || isLoading) return;
     const text = input.trim();
     setInput("");
-    await sendMessage(text);
+    await sendMessage(text, scopeFile ? { fileId: scopeFile.id } : undefined);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -78,6 +92,21 @@ export default function ChatPage() {
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+          {scopeFile && (
+            <div className="mb-4 flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">
+                Chatting with <span className="font-medium">{scopeFile.originalName}</span>
+              </span>
+              <button
+                onClick={() => setScopeFile(null)}
+                className="rounded p-1 text-muted-foreground hover:bg-accent"
+                aria-label="Clear file scope"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           {error && (
             <div
               role="alert"

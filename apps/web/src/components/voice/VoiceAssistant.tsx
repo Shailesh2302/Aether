@@ -168,13 +168,15 @@ export function VoiceAssistant() {
             speak(msg);
             router.push(`/dashboard/videos/${best.id}`);
           } else {
+            // Documents/audio open in the file viewer (preview + chat +
+            // in-file search) instead of a raw download.
             const msg =
               ranked.length > 1
                 ? `I found ${ranked.length} matches. Opening the best one: ${best.originalName}.`
                 : `Opening ${best.originalName}.`;
             setReply(msg);
             speak(msg);
-            if (best.url) window.open(best.url, "_blank", "noopener");
+            router.push(`/dashboard/files/${best.id}`);
           }
         }
       } catch {

@@ -258,7 +258,7 @@ function FileGridCard({
 }) {
   const category = getFileCategory(file.mimeType);
   const href =
-    category === "video" ? `/dashboard/videos/${file.id}` : "#";
+    category === "video" ? `/dashboard/videos/${file.id}` : `/dashboard/files/${file.id}`;
 
   return (
     <div className="group relative overflow-hidden rounded-lg border bg-card transition-colors hover:border-primary/40">
@@ -344,7 +344,7 @@ function FileListRow({
 }) {
   const category = getFileCategory(file.mimeType);
   const href =
-    category === "video" ? `/dashboard/videos/${file.id}` : "#";
+    category === "video" ? `/dashboard/videos/${file.id}` : `/dashboard/files/${file.id}`;
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/30">

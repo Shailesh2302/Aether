@@ -263,6 +263,7 @@ export interface SearchResult {
   fileId: string;
   fileName: string;
   snippet: string;
+  text?: string;
   timestamp?: number;
   score: number;
   mimeType?: string;
@@ -503,10 +504,10 @@ export const chatApi = {
 // ============================================================================
 
 export const searchApi = {
-  async search(query: string) {
+  async search(query: string, fileId?: string) {
     const { data } = await api.get<
       { results: SearchResult[] } | SearchResult[]
-    >("/search", { params: { q: query } });
+    >("/search", { params: fileId ? { q: query, fileId } : { q: query } });
     if (Array.isArray(data)) return data;
     return data.results ?? [];
   },

@@ -190,12 +190,13 @@ function ResultCard({
       ? ImageIcon
       : FileText;
 
-  const href =
-    result.timestamp !== undefined && result.fileId
+  const href = !result.fileId
+    ? "#"
+    : category === "video"
+    ? result.timestamp !== undefined
       ? `/dashboard/videos/${result.fileId}?t=${result.timestamp}`
-      : result.fileId
-      ? `/dashboard/videos/${result.fileId}`
-      : "#";
+      : `/dashboard/videos/${result.fileId}`
+    : `/dashboard/files/${result.fileId}`;
 
   return (
     <Link

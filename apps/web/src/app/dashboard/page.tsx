@@ -146,7 +146,7 @@ export default function DashboardOverviewPage() {
               return (
                 <Link
                   key={f.id}
-                  href={isVideo ? `/dashboard/videos/${f.id}` : "/dashboard/files"}
+                  href={isVideo ? `/dashboard/videos/${f.id}` : `/dashboard/files/${f.id}`}
                   className="group flex items-center gap-4 border-b border-border px-2 py-4 transition hover:bg-white/[0.02]"
                 >
                   <span className="font-mono text-[10px] text-muted-foreground">

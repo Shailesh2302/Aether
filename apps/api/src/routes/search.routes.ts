@@ -21,15 +21,18 @@ const validateRequest = (req: Request, res: Response, next: NextFunction) => {
 async function semanticSearch(
   userId: string,
   query: string,
-  limit: number
+  limit: number,
+  fileId?: string
 ): Promise<{ results: unknown[]; query: string; message?: string }> {
   const userFiles = await prisma.file.findMany({
-    where: { userId, status: 'COMPLETED' },
+    where: fileId
+      ? { userId, id: fileId, status: 'COMPLETED' }
+      : { userId, status: 'COMPLETED' },
     select: { id: true, name: true, originalName: true, mimeType: true },
   });
 
   if (userFiles.length === 0) {
-    return { results: [], query, message: 'No indexed files found' };
+    return { results: [], query, message: fileId ? 'File is not indexed yet' : 'No indexed files found' };
   }
 
   const collectionName = `user_${userId}`.replace(/-/g, '_');
@@ -40,7 +43,9 @@ async function semanticSearch(
     const results = await vectorService.searchPoints(
       collectionName,
       queryEmbedding,
-      limit
+      limit,
+      0,
+      fileId ? { file_id: fileId } : undefined
     );
 
     const fileIds = [...new Set(results.map((r) => String((r.payload as Record<string, unknown>).file_id ?? '')))].filter(Boolean);
@@ -100,12 +105,13 @@ router.get(
     try {
       const q = req.query.q as string | undefined;
       const limit = parseInt(String(req.query.limit || '10'), 10);
+      const fileId = typeof req.query.fileId === 'string' && req.query.fileId ? req.query.fileId : undefined;
 
       if (!q) {
         return res.json({ results: [], message: 'No query provided' });
       }
 
-      const result = await semanticSearch(req.user!.userId, q, limit);
+      const result = await semanticSearch(req.user!.userId, q, limit, fileId);
       res.json(result);
     } catch (error) {
       next(error);
@@ -123,11 +129,12 @@ router.post(
   validateRequest,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { query, limit = 10 } = req.body;
+      const { query, limit = 10, fileId } = req.body;
       const result = await semanticSearch(
         req.user!.userId,
         query,
-        parseInt(String(limit), 10)
+        parseInt(String(limit), 10),
+        typeof fileId === 'string' && fileId ? fileId : undefined
       );
       res.json(result);
     } catch (error) {

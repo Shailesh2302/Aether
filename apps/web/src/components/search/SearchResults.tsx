@@ -41,8 +41,18 @@ export function SearchResults({ results, isLoading, onResultClick }: SearchResul
   const handleResultClick = (result: SearchResult) => {
     if (onResultClick) {
       onResultClick(result);
-    } else if (result.timestamp !== undefined && result.fileId) {
-      router.push(`/dashboard/videos/${result.fileId}?t=${result.timestamp}`);
+      return;
+    }
+    if (!result.fileId) return;
+    const isVideo = (result.mimeType || "").startsWith("video/");
+    if (isVideo) {
+      router.push(
+        result.timestamp !== undefined
+          ? `/dashboard/videos/${result.fileId}?t=${result.timestamp}`
+          : `/dashboard/videos/${result.fileId}`
+      );
+    } else {
+      router.push(`/dashboard/files/${result.fileId}`);
     }
   };
 

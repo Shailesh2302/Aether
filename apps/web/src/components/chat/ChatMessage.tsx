@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { cn, formatDuration } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Bot, User, Copy, Check, Clock } from "lucide-react";
+import { Bot, User, Copy, Check, Clock, AlertTriangle, FileText } from "lucide-react";
 import type { ChatMessage } from "@/lib/api";
 
 interface ChatMessageProps {
@@ -10,11 +10,15 @@ interface ChatMessageProps {
   sources?: Array<{
     timestamp?: number;
     text: string;
+    version?: number;
+    originalName?: string;
+    fileId?: string;
   }>;
+  versionConflict?: { document: string; versions: number[] } | null;
   onTimestampClick?: (timestamp: number) => void;
 }
 
-export function ChatMessage({ message, sources = [], onTimestampClick }: ChatMessageProps) {
+export function ChatMessage({ message, sources = [], versionConflict, onTimestampClick }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === "user";
 
@@ -95,7 +99,38 @@ export function ChatMessage({ message, sources = [], onTimestampClick }: ChatMes
             : "bg-muted"
         )}
       >
+        {!isUser && versionConflict && (
+          <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+            <span>
+              Multiple versions of <span className="font-medium">{versionConflict.document}</span> were
+              used: {versionConflict.versions.map((v) => `v${v}`).join(", ")}. Claims below are
+              labeled per version — check which one you trust.
+            </span>
+          </div>
+        )}
         <p className="text-sm whitespace-pre-wrap">{renderContent()}</p>
+        {!isUser && sources.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5 border-t border-border/50 pt-2">
+            {sources.slice(0, 4).map((s, i) => (
+              <span
+                key={i}
+                className="inline-flex max-w-full items-center gap-1 rounded bg-background/60 px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                title={s.text?.slice(0, 200)}
+              >
+                <FileText className="h-3 w-3 shrink-0" />
+                <span className="truncate">
+                  {(s.originalName || "Source").split("/").pop()}
+                </span>
+                {typeof s.version === "number" && (
+                  <span className="rounded bg-primary/15 px-1 font-mono text-[10px] text-primary">
+                    v{s.version}
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
         <div className={cn(
           "flex items-center justify-between mt-2 gap-4",
           isUser ? "text-primary-foreground/60" : "text-muted-foreground"

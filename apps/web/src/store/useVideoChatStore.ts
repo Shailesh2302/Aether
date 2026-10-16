@@ -63,6 +63,8 @@ export const useVideoChatStore = create<VideoChatState>((set, get) => ({
         role: "assistant",
         content: response.message,
         createdAt: new Date().toISOString(),
+        sources: response.sources ?? [],
+        versionConflict: response.versionConflict ?? null,
       };
 
       set((state) => ({

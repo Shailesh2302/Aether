@@ -49,6 +49,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: "assistant",
         content: response.message,
         createdAt: new Date().toISOString(),
+        sources: response.sources ?? [],
+        versionConflict: response.versionConflict ?? null,
       };
 
       set((state) => ({

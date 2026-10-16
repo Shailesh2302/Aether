@@ -30,9 +30,12 @@ export const nullReporter: JobReporter = {
   setError: async () => undefined,
 };
 
-async function indexViaAI(args: {
+export interface IndexJob {
   fileId: string; inputPath: string; userId: string; mimeType: string;
-}): Promise<void> {
+  fileVersion?: number; originalName?: string;
+}
+
+async function indexViaAI(args: IndexJob): Promise<void> {
   // Preferred path: AI service reads the file directly (shared filesystem,
   // e.g. local dev + queue worker on the same host).
   try {
@@ -44,6 +47,8 @@ async function indexViaAI(args: {
         file_path: path.resolve(args.inputPath),
         user_id: args.userId || 'unknown',
         mime_type: args.mimeType,
+        ...(args.fileVersion !== undefined ? { file_version: args.fileVersion } : {}),
+        ...(args.originalName ? { original_name: args.originalName } : {}),
       }),
     }, BG_TIMEOUT_MS);
     if (indexResp.ok) return;
@@ -75,9 +80,7 @@ function chunkText(text: string, maxLen = 900): string[] {
   return out.length > 0 ? out : [normalized.slice(0, maxLen)];
 }
 
-async function indexViaUpload(args: {
-  fileId: string; inputPath: string; userId: string; mimeType: string;
-}): Promise<void> {
+async function indexViaUpload(args: IndexJob): Promise<void> {
   const isMedia = args.mimeType.startsWith('video/') || args.mimeType.startsWith('audio/');
   let text = '';
 
@@ -124,7 +127,11 @@ async function indexViaUpload(args: {
     file_id: args.fileId,
     user_id: args.userId,
     chunk_index: i,
-    metadata: { file_type: args.mimeType },
+    metadata: {
+      file_type: args.mimeType,
+      ...(args.fileVersion !== undefined ? { doc_version: args.fileVersion } : {}),
+      ...(args.originalName ? { original_name: args.originalName } : {}),
+    },
   }));
   const vectors: number[][] = [firstEmbedding];
   for (const chunk of chunks.slice(1)) {
@@ -139,7 +146,7 @@ async function indexViaUpload(args: {
 }
 
 export async function processVideoFile(
-  job: { id: string; fileId: string; inputPath: string; mimeType: string; userId: string },
+  job: { id: string; fileId: string; inputPath: string; mimeType: string; userId: string; fileVersion?: number; originalName?: string },
   report: JobReporter = nullReporter,
 ): Promise<void> {
   const { id: jobKey, fileId } = job;
@@ -152,7 +159,7 @@ export async function processVideoFile(
     if (!job.inputPath || !fs.existsSync(job.inputPath)) {
       throw new Error(`Source video not found: ${job.inputPath}`);
     }
-    await indexViaAI({ fileId, inputPath: job.inputPath, userId: job.userId, mimeType: job.mimeType || 'video/mp4' });
+    await indexViaAI({ fileId, inputPath: job.inputPath, userId: job.userId, mimeType: job.mimeType || 'video/mp4', fileVersion: job.fileVersion, originalName: job.originalName });
     if (fileId) {
       await prisma.file.update({ where: { id: fileId }, data: { status: 'COMPLETED' } }).catch(() => undefined);
     }
@@ -170,14 +177,14 @@ export async function processVideoFile(
 }
 
 export async function processDocumentFile(
-  job: { id: string; fileId: string; inputPath: string; mimeType: string; userId: string },
+  job: { id: string; fileId: string; inputPath: string; mimeType: string; userId: string; fileVersion?: number; originalName?: string },
   report: JobReporter = nullReporter,
 ): Promise<void> {
   const { id: jobKey, fileId } = job;
   logger.info({ jobId: jobKey, fileId }, 'Processing document file');
   try {
     await report.setStatus(jobKey, 'PROCESSING');
-    await indexViaAI({ fileId, inputPath: job.inputPath, userId: job.userId, mimeType: job.mimeType || 'application/octet-stream' });
+    await indexViaAI({ fileId, inputPath: job.inputPath, userId: job.userId, mimeType: job.mimeType || 'application/octet-stream', fileVersion: job.fileVersion, originalName: job.originalName });
     await prisma.file.update({ where: { id: fileId }, data: { status: 'COMPLETED' } }).catch(() => undefined);
     await report.setStatus(jobKey, 'COMPLETED');
     logger.info({ jobId: jobKey, fileId }, 'Document processing completed');

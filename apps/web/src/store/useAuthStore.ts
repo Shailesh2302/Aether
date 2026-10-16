@@ -19,7 +19,10 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      isLoading: false,
+      // Start loading: the persisted session (if any) is re-applied and
+      // revalidated async. Starting false would flash-redirect logged-in
+      // users to /login on every refresh before restore finishes.
+      isLoading: true,
       isAuthenticated: false,
       error: null,
 

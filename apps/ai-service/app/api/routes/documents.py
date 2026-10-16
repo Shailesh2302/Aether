@@ -125,6 +125,8 @@ class DocumentIndexRequest(BaseModel):
     user_id: str
     mime_type: Optional[str] = None
     collection: Optional[str] = None
+    file_version: Optional[int] = None
+    original_name: Optional[str] = None
 
 
 @router.post("/documents/index", response_model=DocumentIndexResponse)
@@ -141,11 +143,17 @@ async def index_document(
     safe_path = validate_readable_path(request.file_path)
 
     try:
+        version_meta = {}
+        if request.file_version is not None:
+            version_meta["doc_version"] = request.file_version
+        if request.original_name:
+            version_meta["original_name"] = request.original_name
         result = await pipeline.process_document(
             file_path=safe_path,
             file_id=request.file_id,
             user_id=request.user_id,
             mime_type=request.mime_type,
+            metadata=version_meta or None,
         )
 
         return DocumentIndexResponse(

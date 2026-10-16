@@ -255,6 +255,8 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   createdAt?: string;
+  sources?: ChatSource[];
+  versionConflict?: { document: string; versions: number[] } | null;
 }
 
 export interface ChatSource {
@@ -262,12 +264,28 @@ export interface ChatSource {
   fileName: string;
   timestamp?: number;
   text: string;
+  version?: number;
+  originalName?: string;
+}
+
+export interface VersionNote {
+  fileId: string;
+  originalName: string;
+  version: number;
+  uploadedAt: string;
+}
+
+export interface VersionConflict {
+  document: string;
+  versions: number[];
 }
 
 export interface ChatResponse {
   message: string;
   sources?: ChatSource[];
   sessionId?: string;
+  versionNotes?: VersionNote[];
+  versionConflict?: VersionConflict | null;
 }
 
 export interface TranscriptSegment {
@@ -281,6 +299,7 @@ export interface SearchResult {
   id: string;
   fileId: string;
   fileName: string;
+  version?: number;
   snippet: string;
   text?: string;
   timestamp?: number;

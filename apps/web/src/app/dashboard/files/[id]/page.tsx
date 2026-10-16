@@ -169,6 +169,12 @@ export default function FileViewerPage() {
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{category}</Badge>
             <Badge variant="outline">{file.status}</Badge>
+            {typeof (file.metadata as Record<string, unknown> | null)?.version === "number" &&
+              Number((file.metadata as Record<string, unknown>).version) > 1 && (
+                <Badge variant="outline" className="font-mono">
+                  v{Number((file.metadata as Record<string, unknown>).version)}
+                </Badge>
+              )}
           </div>
         </div>
         {file.url && (

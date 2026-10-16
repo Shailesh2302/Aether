@@ -106,6 +106,8 @@ async function processUploadedFile(
     }
   }
 
+  const versioning = await nextVersion(userId, originalName);
+
   const dbFile = await prisma.file.create({
     data: {
       userId,
@@ -116,7 +118,10 @@ async function processUploadedFile(
       path: storageResult.path,
       url: storageResult.url,
       status: 'PENDING',
-      metadata: (metadata ?? {}) as Record<string, string | number>,
+      metadata: {
+        ...(metadata ?? {}),
+        ...versioning,
+      } as Record<string, string | number>,
     },
   });
 
@@ -129,6 +134,8 @@ async function processUploadedFile(
           filePath: storageResult.path,
           mimeType,
           userId,
+          fileVersion: versioning.version,
+          originalName,
         });
         await prisma.file.update({
           where: { id: dbFile.id },
@@ -147,6 +154,8 @@ async function processUploadedFile(
           inputPath: storageResult.path,
           mimeType,
           userId,
+          fileVersion: versioning.version,
+          originalName,
         }).catch(() => undefined);
       }
     } else if (DOCUMENT_MIMES.has(mimeType)) {
@@ -157,7 +166,7 @@ async function processUploadedFile(
 
       // Index in the background so uploads return instantly.
       // The file's DB row is updated when indexing finishes.
-      void indexDocumentInBackground(dbFile.id, storageResult.path, mimeType, userId).catch((err) => {
+      void indexDocumentInBackground(dbFile.id, storageResult.path, mimeType, userId, versioning.version, originalName).catch((err) => {
         logger.error({ err, fileId: dbFile.id }, 'Background indexing crashed');
       });
     }
@@ -194,13 +203,37 @@ async function processUploadedFile(
 
 
 /**
+ * Version tracking: re-uploading the same originalName creates a new
+ * version rather than a duplicate. Versions order by creation time;
+ * rows predating this feature count as version 1.
+ */
+async function nextVersion(userId: string, originalName: string): Promise<{ version: number; previousVersionId: string | null }> {
+  const siblings = await prisma.file.findMany({
+    where: { userId, originalName },
+    select: { id: true, metadata: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (siblings.length === 0) {
+    return { version: 1, previousVersionId: null };
+  }
+  let maxV = 1;
+  for (const s of siblings) {
+    const v = Number((s.metadata as Record<string, unknown> | null)?.version ?? 1);
+    if (Number.isFinite(v) && v > maxV) maxV = v;
+  }
+  return { version: maxV + 1, previousVersionId: siblings[siblings.length - 1].id };
+}
+
+/**
  * Background document indexing - never blocks the upload response.
  */
 async function indexDocumentInBackground(
   fileId: string,
   filePath: string,
   mimeType: string,
-  userId: string
+  userId: string,
+  fileVersion?: number,
+  originalName?: string
 ): Promise<void> {
   try {
     const aiResponse = await fetchWithTimeout(`${config.aiServiceUrl}/api/v1/documents/index`, {
@@ -211,6 +244,8 @@ async function indexDocumentInBackground(
         file_path: path.resolve(filePath),
         mime_type: mimeType,
         user_id: userId,
+        ...(fileVersion !== undefined ? { file_version: fileVersion } : {}),
+        ...(originalName ? { original_name: originalName } : {}),
       }),
     }, 600_000);
     if (aiResponse.ok) {
@@ -223,7 +258,7 @@ async function indexDocumentInBackground(
     if (!queueService.isConnected()) {
       // No Redis to fall back to - process inline instead of stalling.
       logger.warn({ fileId }, 'Direct indexing failed and no queue, processing inline');
-      await processDocumentFile({ id: `inline:${fileId}`, fileId, inputPath: filePath, mimeType, userId }).catch(() => undefined);
+      await processDocumentFile({ id: `inline:${fileId}`, fileId, inputPath: filePath, mimeType, userId, fileVersion, originalName }).catch(() => undefined);
       return;
     }
     logger.warn({ indexError, fileId }, 'Direct indexing failed, enqueuing for worker');
@@ -232,6 +267,8 @@ async function indexDocumentInBackground(
       filePath,
       mimeType,
       userId,
+      fileVersion,
+      originalName,
     }).catch(() => undefined);
   }
 }

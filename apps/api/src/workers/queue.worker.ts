@@ -29,7 +29,7 @@ interface VideoJobShape {
   video_id?: string;
   document_id?: string;
   input_path?: string;
-  parameters?: { userId?: string; mimeType?: string };
+  parameters?: { userId?: string; mimeType?: string; fileVersion?: number; originalName?: string };
 }
 
 async function processVideoJob(redis: Redis, job: VideoJobShape) {
@@ -40,19 +40,24 @@ async function processVideoJob(redis: Redis, job: VideoJobShape) {
       inputPath: job.input_path || '',
       mimeType: job.parameters?.mimeType || 'video/mp4',
       userId: job.parameters?.userId || 'unknown',
+      fileVersion: job.parameters?.fileVersion,
+      originalName: job.parameters?.originalName,
     },
     redisReporter(redis)
   ).catch(() => undefined);
 }
 
 async function processDocumentJob(redis: Redis, job: DocumentJobData & { id: string }) {
+  const params = (job.parameters ?? {}) as { userId?: string; mimeType?: string; fileVersion?: number; originalName?: string };
   await processDocumentFile(
     {
       id: job.id,
       fileId: job.document_id,
       inputPath: job.input_path,
-      mimeType: job.parameters?.mimeType || 'application/octet-stream',
-      userId: job.parameters?.userId || 'unknown',
+      mimeType: params.mimeType || 'application/octet-stream',
+      userId: params.userId || 'unknown',
+      fileVersion: params.fileVersion,
+      originalName: params.originalName,
     },
     redisReporter(redis)
   ).catch(() => undefined);

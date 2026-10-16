@@ -127,7 +127,12 @@ export default function ChatPage() {
           ) : (
             <div className="space-y-4">
               {messages.map((msg) => (
-                <ChatMessage key={msg.id} message={msg} />
+                <ChatMessage
+                  key={msg.id}
+                  message={msg}
+                  sources={msg.role === "assistant" ? msg.sources ?? [] : []}
+                  versionConflict={msg.role === "assistant" ? msg.versionConflict ?? null : null}
+                />
               ))}
               {isLoading && (
                 <div className="flex items-start gap-3">

@@ -90,7 +90,7 @@ class QueueService {
     return `${prefix}:${Date.now()}:${Math.random().toString(36).substring(2, 9)}`;
   }
 
-  async addVideoProcessingJob(data: { fileId: string; filePath: string; mimeType: string; userId: string }): Promise<string> {
+  async addVideoProcessingJob(data: { fileId: string; filePath: string; mimeType: string; userId: string; fileVersion?: number; originalName?: string }): Promise<string> {
     const jobId = this.createJobId('video');
 
     const job: VideoJobData = {
@@ -101,6 +101,8 @@ class QueueService {
       parameters: {
         mimeType: data.mimeType,
         userId: data.userId,
+        ...(data.fileVersion !== undefined ? { fileVersion: data.fileVersion } : {}),
+        ...(data.originalName ? { originalName: data.originalName } : {}),
       },
       status: 'Queued',
     };
@@ -115,7 +117,7 @@ class QueueService {
     return jobId;
   }
 
-  async addDocumentProcessingJob(data: { fileId: string; filePath: string; mimeType: string; userId: string }): Promise<string> {
+  async addDocumentProcessingJob(data: { fileId: string; filePath: string; mimeType: string; userId: string; fileVersion?: number; originalName?: string }): Promise<string> {
     const jobId = this.createJobId('doc');
 
     const job: DocumentJobData = {
@@ -126,6 +128,8 @@ class QueueService {
       parameters: {
         mimeType: data.mimeType,
         userId: data.userId,
+        ...(data.fileVersion !== undefined ? { fileVersion: data.fileVersion } : {}),
+        ...(data.originalName ? { originalName: data.originalName } : {}),
       },
       status: 'Queued',
     };

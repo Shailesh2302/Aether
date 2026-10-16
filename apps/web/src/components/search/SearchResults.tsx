@@ -75,6 +75,11 @@ export function SearchResults({ results, isLoading, onResultClick }: SearchResul
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h4 className="font-medium truncate">{result.fileName}</h4>
+              {typeof result.version === "number" && result.version > 1 && (
+                <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] text-primary">
+                  v{result.version}
+                </span>
+              )}
               {result.fileId && (
                 <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               )}

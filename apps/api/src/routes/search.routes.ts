@@ -52,10 +52,14 @@ async function semanticSearch(
     const files = fileIds.length > 0
       ? await prisma.file.findMany({
           where: { id: { in: fileIds }, userId },
-          select: { id: true, name: true, originalName: true, mimeType: true },
+          select: { id: true, name: true, originalName: true, mimeType: true, createdAt: true, metadata: true },
         })
       : [];
     const fileById = new Map(files.map((f) => [f.id, f]));
+    const versionOf = (fid: string): number => {
+      const v = Number((fileById.get(fid)?.metadata as Record<string, unknown> | null)?.version ?? 1);
+      return Number.isFinite(v) && v > 0 ? v : 1;
+    };
 
     return {
       results: results.map((r) => {
@@ -68,6 +72,7 @@ async function semanticSearch(
           id: r.id,
           fileId: fid,
           fileName: file?.originalName ?? file?.name ?? String(payload.fileName ?? ''),
+          version: versionOf(fid),
           snippet: text.slice(0, 280),
           text,
           score: r.score,

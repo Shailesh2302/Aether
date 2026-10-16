@@ -67,7 +67,11 @@ router.post(
       });
 
       let context = '';
-      const sources: Array<{text: string; score: number; fileId: string; timestamp?: number}> = [];
+      const sources: Array<{text: string; score: number; fileId: string; timestamp?: number; version?: number; originalName?: string}> = [];
+      // Version conflict info surfaced to the client so the UI can show
+      // which document versions an answer draws from.
+      let versionNotes: Array<{fileId: string; originalName: string; version: number; uploadedAt: string}> = [];
+      let versionConflict: { document: string; versions: number[] } | null = null;
 
       try {
         const queryEmbedding = await aiService.createEmbedding(message);
@@ -94,12 +98,57 @@ router.post(
           context = scoped
             .map((r) => r.payload.text as string)
             .join('\n\n');
-          sources.push(...scoped.map((r) => ({
-            text: r.payload.text as string,
-            score: r.score,
-            fileId: r.payload.file_id as string,
-            timestamp: (r.payload.metadata as Record<string, unknown>)?.start_sec as number,
-          })));
+
+          // Resolve owning files for version labels + conflict detection.
+          const hitIds = [...new Set(scoped.map((r) => String((r.payload as Record<string, unknown>).file_id ?? '')))].filter(Boolean);
+          const hitFiles = hitIds.length > 0
+            ? await prisma.file.findMany({
+                where: { id: { in: hitIds }, userId },
+                select: { id: true, originalName: true, createdAt: true, metadata: true },
+              })
+            : [];
+          const fileById = new Map(hitFiles.map((f) => [f.id, f]));
+          const versionOf = (fid: string): number => {
+            const f = fileById.get(fid);
+            const v = Number((f?.metadata as Record<string, unknown> | null)?.version ?? 1);
+            return Number.isFinite(v) && v > 0 ? v : 1;
+          };
+
+          sources.push(...scoped.map((r) => {
+            const payload = r.payload as Record<string, unknown>;
+            const fid = String(payload.file_id ?? '');
+            const f = fileById.get(fid);
+            return {
+              text: payload.text as string,
+              score: r.score,
+              fileId: fid,
+              timestamp: (payload.metadata as Record<string, unknown>)?.start_sec as number,
+              version: versionOf(fid),
+              originalName: f?.originalName ?? String(payload.fileName ?? ''),
+            };
+          }));
+
+          versionNotes = hitFiles.map((f) => ({
+            fileId: f.id,
+            originalName: f.originalName,
+            version: versionOf(f.id),
+            uploadedAt: f.createdAt.toISOString(),
+          }));
+
+          // Conflict: context spans 2+ versions of the same document name.
+          const byDoc = new Map<string, Set<number>>();
+          for (const n of versionNotes) {
+            const key = n.originalName.toLowerCase();
+            if (!byDoc.has(key)) byDoc.set(key, new Set());
+            byDoc.get(key)!.add(n.version);
+          }
+          for (const [doc, versions] of byDoc) {
+            if (versions.size > 1) {
+              const original = versionNotes.find((n) => n.originalName.toLowerCase() === doc)?.originalName ?? doc;
+              versionConflict = { document: original, versions: [...versions].sort((a, b) => a - b) };
+              break;
+            }
+          }
         }
       } catch (error) {
         logger.warn({ error }, 'Vector search failed, using context-free response');
@@ -118,7 +167,14 @@ router.post(
           top_k: 5,
         };
         if (context) {
-          requestBody.system_prompt = `You are a helpful assistant. Use the following context to answer questions:\n\n${context}`;
+          let prompt = `You are a helpful assistant. Use the following context to answer questions:\n\n${context}`;
+          if (versionConflict) {
+            const vs = versionConflict.versions.map((v) => `v${v}`).join(' and ');
+            prompt += `\n\nImportant: the context above mixes ${vs} of "${versionConflict.document}". `
+              + `These versions may disagree. Attribute each claim to its version (e.g. "According to v2..."), `
+              + `and if the versions conflict, say so explicitly instead of blending them into one answer.`;
+          }
+          requestBody.system_prompt = prompt;
         }
 
         const aiResponse = await fetch(`${config.aiServiceUrl}/api/v1/chat?${params}`, {
@@ -130,11 +186,27 @@ router.post(
         if (aiResponse.ok) {
           const data = await aiResponse.json() as any;
           assistantMessage = data.message || '';
-          sources.push(...(data.sources || []).map((s: any) => ({
+          const aiSources: Array<{text: string; score: number; fileId: string}> = (data.sources || []).map((s: any) => ({
             text: s.text || s.content || '',
             score: s.score || 0,
             fileId: s.file_id || fileId || '',
-          })));
+          }));
+          // Enrich AI-service sources with version labels like local ones.
+          const aiIds = [...new Set(aiSources.map((s) => s.fileId))].filter(Boolean);
+          if (aiIds.length > 0) {
+            const aiFiles = await prisma.file.findMany({
+              where: { id: { in: aiIds }, userId },
+              select: { id: true, originalName: true, createdAt: true, metadata: true },
+            });
+            const aiById = new Map(aiFiles.map((f) => [f.id, f]));
+            for (const s of aiSources) {
+              const f = aiById.get(s.fileId);
+              const v = Number((f?.metadata as Record<string, unknown> | null)?.version ?? 1);
+              (s as Record<string, unknown>).version = Number.isFinite(v) && v > 0 ? v : 1;
+              (s as Record<string, unknown>).originalName = f?.originalName ?? '';
+            }
+          }
+          sources.push(...aiSources);
         } else {
           throw new Error('AI service returned error');
         }
@@ -161,6 +233,8 @@ router.post(
         message: assistantMessage,
         sessionId: session.id,
         sources,
+        versionNotes,
+        versionConflict,
       });
     } catch (error) {
       next(error);

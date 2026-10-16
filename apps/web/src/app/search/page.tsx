@@ -209,6 +209,11 @@ function ResultCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="truncate text-sm font-medium">{result.fileName}</p>
+          {typeof result.version === "number" && result.version > 1 && (
+            <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] text-primary">
+              v{result.version}
+            </span>
+          )}
           <ArrowRight className="h-3 w-3 -translate-x-1 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
         </div>
         {result.snippet && (

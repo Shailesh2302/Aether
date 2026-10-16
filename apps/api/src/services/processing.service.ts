@@ -1,9 +1,13 @@
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/db.js';
-import { trimVideo, generateThumbnail } from '../utils/ffmpeg.js';
+import { trimVideo, generateThumbnail, extractAudio } from '../utils/ffmpeg.js';
+import { aiService } from './ai.service.js';
+import { vectorService } from './vector.service.js';
+import { randomUUID } from 'crypto';
 
 /**
  * Core media/document processing used by BOTH the queue worker and the
@@ -25,20 +29,109 @@ export const nullReporter: JobReporter = {
 async function indexViaAI(args: {
   fileId: string; inputPath: string; userId: string; mimeType: string;
 }): Promise<void> {
-  const indexResp = await fetch(`${config.aiServiceUrl}/api/v1/documents/index`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      file_id: args.fileId,
-      file_path: path.resolve(args.inputPath),
-      user_id: args.userId || 'unknown',
-      mime_type: args.mimeType,
-    }),
-  });
-  if (!indexResp.ok) {
-    const errText = await indexResp.text();
-    throw new Error(`Indexing failed: ${errText.slice(0, 300)}`);
+  // Preferred path: AI service reads the file directly (shared filesystem,
+  // e.g. local dev + queue worker on the same host).
+  try {
+    const indexResp = await fetch(`${config.aiServiceUrl}/api/v1/documents/index`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file_id: args.fileId,
+        file_path: path.resolve(args.inputPath),
+        user_id: args.userId || 'unknown',
+        mime_type: args.mimeType,
+      }),
+    });
+    if (indexResp.ok) return;
+    logger.warn({ status: indexResp.status, fileId: args.fileId }, 'Path-based indexing refused, falling back to upload');
+  } catch (err) {
+    logger.warn({ err, fileId: args.fileId }, 'Path-based indexing unreachable, falling back to upload');
   }
+  // Fallback path: stream the bytes to the AI service (separate containers
+  // in production share nothing). Extract text remotely, embed + upsert here.
+  await indexViaUpload(args);
+}
+
+function chunkText(text: string, maxLen = 900): string[] {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+  const sentences = normalized.split(/(?<=[.!?])\s+/).filter((s) => s.trim());
+  const source = sentences.length > 1 ? sentences : [normalized];
+  const out: string[] = [];
+  let buf = '';
+  for (const piece of source.length > 1 ? source : normalized.match(new RegExp(`.{1,${maxLen}}`, 'g')) || []) {
+    if ((buf + ' ' + piece).trim().length > maxLen && buf) {
+      out.push(buf.trim());
+      buf = piece;
+    } else {
+      buf = `${buf} ${piece}`.trim();
+    }
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.length > 0 ? out : [normalized.slice(0, maxLen)];
+}
+
+async function indexViaUpload(args: {
+  fileId: string; inputPath: string; userId: string; mimeType: string;
+}): Promise<void> {
+  const isMedia = args.mimeType.startsWith('video/') || args.mimeType.startsWith('audio/');
+  let text = '';
+
+  if (isMedia) {
+    const tmpAudio = path.join(os.tmpdir(), `aether-${randomUUID()}.mp3`);
+    try {
+      await extractAudio(path.resolve(args.inputPath), tmpAudio);
+      const audioBuf = await fs.promises.readFile(tmpAudio);
+      const form = new FormData();
+      form.append('file', new Blob([new Uint8Array(audioBuf)], { type: 'audio/mpeg' }), 'audio.mp3');
+      const tResp = await fetch(`${config.aiServiceUrl}/api/v1/transcription`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!tResp.ok) throw new Error(`Transcription returned ${tResp.status}`);
+      const tData = await tResp.json() as { text?: string };
+      text = tData.text || '';
+    } finally {
+      await fs.promises.unlink(tmpAudio).catch(() => undefined);
+    }
+  } else {
+    const buf = await fs.promises.readFile(path.resolve(args.inputPath));
+    const form = new FormData();
+    form.append('file', new Blob([new Uint8Array(buf)], { type: args.mimeType }), path.basename(args.inputPath));
+    const eResp = await fetch(`${config.aiServiceUrl}/api/v1/documents/extract`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!eResp.ok) throw new Error(`Extraction returned ${eResp.status}`);
+    const eData = await eResp.json() as { text?: string };
+    text = eData.text || '';
+  }
+
+  if (!text.trim()) throw new Error('No text extracted for indexing');
+
+  const chunks = chunkText(text).slice(0, 500);
+  const collection = `user_${args.userId}`.replace(/-/g, '_');
+  const firstEmbedding = await aiService.createEmbedding(chunks[0]);
+  if (!(await vectorService.collectionExists(collection))) {
+    await vectorService.createCollection(collection, firstEmbedding.length);
+  }
+  const payloads = chunks.map((chunk, i) => ({
+    text: chunk,
+    file_id: args.fileId,
+    user_id: args.userId,
+    chunk_index: i,
+    metadata: { file_type: args.mimeType },
+  }));
+  const vectors: number[][] = [firstEmbedding];
+  for (const chunk of chunks.slice(1)) {
+    vectors.push(await aiService.createEmbedding(chunk));
+  }
+  const ok = await vectorService.upsertPoints(
+    collection,
+    vectors.map((vector, i) => ({ id: randomUUID(), vector, payload: payloads[i] }))
+  );
+  if (!ok) throw new Error('Vector upsert failed');
+  logger.info({ fileId: args.fileId, chunks: chunks.length }, 'Upload-based indexing finished');
 }
 
 export async function processVideoFile(

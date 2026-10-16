@@ -26,7 +26,9 @@ ENV PORT=3001
 # Postgres (Neon, RDS, Supabase, etc.). node:20-alpine does not include it,
 # which causes `prisma migrate deploy` to fail with
 # `Could not parse schema engine response: "Error load"`.
-RUN apk add --no-cache openssl
+# ffmpeg is needed for clip cutting, thumbnails and audio extraction
+# (clips + voice/video processing run in this same container).
+RUN apk add --no-cache openssl ffmpeg
 
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 

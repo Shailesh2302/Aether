@@ -178,6 +178,14 @@ class VectorService {
         body: JSON.stringify(body),
       });
 
+      if (response.status === 404) {
+        // Qdrant < 1.10 has no universal /points/query endpoint - fall back
+        // to the classic /points/search API (same result shape).
+        await response.arrayBuffer().catch(() => undefined);
+        logger.info({ collection }, 'Falling back to legacy /points/search');
+        return this.legacySearchPoints(collection, vector, limit, scoreThreshold, filter);
+      }
+
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(`Search failed: ${response.status} ${errText.slice(0, 200)}`);
@@ -195,6 +203,52 @@ class VectorService {
       logger.error({ err: error instanceof Error ? error.message : String(error), collection, vectorSize: vector.length }, 'Failed to search points');
       throw error;
     }
+  }
+
+  /** Classic search API for Qdrant < 1.10 (no /points/query). */
+  private async legacySearchPoints(
+    collection: string,
+    vector: number[],
+    limit = 10,
+    scoreThreshold = 0.0,
+    filter?: Record<string, unknown>
+  ): Promise<SearchResult[]> {
+    const body: Record<string, unknown> = {
+      vector,
+      limit,
+      with_payload: true,
+    };
+    if (scoreThreshold > 0) {
+      body.score_threshold = scoreThreshold;
+    }
+    if (filter && Object.keys(filter).length > 0) {
+      body.filter = {
+        must: Object.entries(filter).map(([key, value]) => ({
+          key,
+          match: { value },
+        })),
+      };
+    }
+
+    const response = await this.fetchWithRetry(`${this.baseUrl}/collections/${collection}/points/search`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Search failed: ${response.status} ${errText.slice(0, 200)}`);
+    }
+
+    const data = await response.json() as any;
+    const points = data.result || [];
+
+    return points.map((p: { id: string; score: number; payload: Record<string, unknown> }) => ({
+      id: p.id,
+      score: p.score,
+      payload: p.payload ?? {},
+    }));
   }
 
   async deletePoints(collection: string, ids: string[]): Promise<boolean> {

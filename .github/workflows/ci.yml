@@ -49,6 +49,11 @@ jobs:
 
       - name: Validate Prisma schema + generate client
         working-directory: apps/api
+        env:
+          # .env is gitignored; validation/generation never connect,
+          # they only need the vars to exist.
+          POSTGRES_URL: postgresql://test:test@localhost:5432/test
+          POSTGRES_DIRECT_URL: postgresql://test:test@localhost:5432/test
         run: |
           bun x prisma validate
           bun x prisma generate

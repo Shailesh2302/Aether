@@ -6,6 +6,7 @@ import { Mic, MicOff, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getToken, type FileItem } from "@/lib/api";
 import { filesApi } from "@/lib/api";
+import { voiceApi } from "@/lib/api";
 import { parseVoiceCommand, rankFiles } from "@/lib/voiceCommands";
 import { useAuthStore } from "@/store/useAuthStore";
 
@@ -78,6 +79,13 @@ export function VoiceAssistant() {
   // Consecutive 'network' blips (Chrome throws these spuriously on restart
   // cycles even with perfect internet). Only give up after several in a row.
   const netErrRef = useRef<number[]>([]);
+  // When the browser speech service is unusable (blocked endpoints), fall
+  // back to recording audio and transcribing with our own Whisper backend.
+  const [mode, setMode] = useState<"browser" | "server">("browser");
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Client-only: zustand-persist rehydrates auth from localStorage after
   // mount, so the server render (signed-out) would mismatch a logged-in
@@ -108,6 +116,23 @@ export function VoiceAssistant() {
       // already stopped
     }
     recogRef.current = null;
+    stopRecording();
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    setRecording(false);
+    try {
+      recorderRef.current?.stop();
+    } catch {
+      // already stopped
+    }
+    recorderRef.current = null;
+    try {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    } catch {
+      // tracks already stopped
+    }
+    streamRef.current = null;
   }, []);
 
   const handleCommand = useCallback(
@@ -291,10 +316,15 @@ export function VoiceAssistant() {
         if (netErrRef.current.length >= 4) {
           wantRef.current = false;
           setHearing(false);
-          setReply(
-            "I still can't reach the speech service (your internet works - this is Chrome's recognizer failing). Check for a VPN, ad-blocker or firewall blocking Google's speech servers, then tap the mic to retry."
-          );
           setPhase("idle");
+          // Browser speech is persistently unreachable here - switch to our
+          // own transcription backend instead of giving up entirely.
+          setMode("server");
+          setReply(
+            "Browser voice isn't reachable on this network, so I switched to server transcription. Tap record, speak your command, tap again - I'll handle the rest."
+          );
+          speak("Browser voice isn't available here. I've switched to server transcription. Tap record and speak.");
+          setDebug("switched to server mode");
         } else {
           setDebug(`cycle ${cycle}: network blip ${netErrRef.current.length}/4 - retrying`);
           // keep listening: onend below starts a fresh cycle
@@ -348,8 +378,76 @@ export function VoiceAssistant() {
       } catch {
         // unmounting
       }
+      try {
+        recorderRef.current?.stop();
+      } catch {
+        // unmounting
+      }
+      try {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+      } catch {
+        // unmounting
+      }
     };
   }, []);
+
+  const startRecording = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setReply("This browser can't access the microphone. Try Chrome.");
+      return;
+    }
+    if (typeof MediaRecorder === "undefined") {
+      setReply("Audio recording isn't supported in this browser. Try Chrome.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : undefined;
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      rec.ondataavailable = (e: BlobEvent) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = async () => {
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+        chunksRef.current = [];
+        try {
+          stream.getTracks().forEach((t) => t.stop());
+        } catch {
+          // tracks already stopped
+        }
+        streamRef.current = null;
+        if (blob.size === 0) {
+          setReply("I didn't hear anything - tap record and speak, then tap again to finish.");
+          setPhase("idle");
+          return;
+        }
+        setPhase("working");
+        setReply("Transcribing…");
+        try {
+          const { text } = await voiceApi.transcribe(blob);
+          const said = text.trim();
+          setTranscript(said);
+          setDebug(`server stt: “${said.slice(0, 40)}”`);
+          await handleCommand(said);
+        } catch {
+          setReply("Transcription failed - tap record and try again.");
+          setPhase("idle");
+        }
+      };
+      recorderRef.current = rec;
+      setTranscript("");
+      setRecording(true);
+      setPhase("listening");
+      setDebug("recording…");
+      rec.start(250);
+    } catch {
+      setReply("Microphone access was denied. Allow it in the browser address bar and try again.");
+      setPhase("idle");
+    }
+  }, [handleCommand]);
 
   if (!visible) return null;
 
@@ -358,7 +456,7 @@ export function VoiceAssistant() {
       {/* Floating mic button - opens the panel AND starts listening right away */}
       <button
         onClick={() => {
-          if (!supported) {
+          if (!supported && mode === "browser") {
             setOpen(true);
             setReply("Voice input isn't supported in this browser. Try Chrome.");
             return;
@@ -368,7 +466,7 @@ export function VoiceAssistant() {
             setOpen(false);
           } else {
             setOpen(true);
-            startListening();
+            if (mode === "browser") startListening();
           }
         }}
         aria-label="Voice assistant"
@@ -418,28 +516,56 @@ export function VoiceAssistant() {
             )}
           </div>
 
-          <button
-            onClick={() => (phase === "listening" ? stopListening() : startListening())}
-            className={cn(
-              "mt-3 flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              phase === "listening"
-                ? "bg-red-500 text-white hover:bg-red-600"
-                : "bg-primary text-primary-foreground hover:bg-primary/90"
-            )}
-          >
-            {phase === "listening" ? (
-              <>
-                <MicOff className="h-4 w-4" /> Stop listening
-              </>
-            ) : (
-              <>
-                <Mic className="h-4 w-4" /> Tap & speak
-              </>
-            )}
-          </button>
-          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-            Try “open docker bind mounts”, “search hot reloading”, or “go to clips”.
-          </p>
+          {mode === "server" ? (
+            <button
+              onClick={() => (recording ? stopRecording() : startRecording())}
+              className={cn(
+                "mt-3 flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                recording
+                  ? "bg-red-500 text-white hover:bg-red-600"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              )}
+            >
+              {recording ? (
+                <>
+                  <MicOff className="h-4 w-4 animate-pulse" /> Tap to finish
+                </>
+              ) : (
+                <>
+                  <Mic className="h-4 w-4" /> Tap & record
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={() => (phase === "listening" ? stopListening() : startListening())}
+              className={cn(
+                "mt-3 flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                phase === "listening"
+                  ? "bg-red-500 text-white hover:bg-red-600"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              )}
+            >
+              {phase === "listening" ? (
+                <>
+                  <MicOff className="h-4 w-4" /> Stop listening
+                </>
+              ) : (
+                <>
+                  <Mic className="h-4 w-4" /> Tap & speak
+                </>
+              )}
+            </button>
+          )}
+          {mode === "server" ? (
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              Server transcription mode (browser voice is blocked here). Record, tap to finish, I&apos;ll do the rest.
+            </p>
+          ) : (
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              Try “open docker bind mounts”, “search hot reloading”, or “go to clips”.
+            </p>
+          )}
           <button
             onClick={() => {
               stopListening();

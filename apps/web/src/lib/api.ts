@@ -920,6 +920,31 @@ export const videoApi = {
   },
 };
 
+// ============================================================================
+// Voice API (server-side transcription fallback)
+// ============================================================================
+
+export const voiceApi = {
+  async transcribe(blob: Blob): Promise<{ text: string; language: string; duration: number }> {
+    const form = new FormData();
+    form.append("file", blob, "command.webm");
+    const response = await fetch(`${API_URL}/voice/transcribe`, {
+      method: "POST",
+      headers: {
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+      body: form,
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(
+        (body as { error?: string }).error || `Transcription failed (${response.status})`
+      );
+    }
+    return (await response.json()) as { text: string; language: string; duration: number };
+  },
+};
+
 export interface TranslatedSegment {
   start_sec: number;
   end_sec: number;

@@ -12,6 +12,7 @@ import { queueService } from './services/queue.service.js';
 
 import authRoutes from './modules/auth/auth.routes.js';
 import subscriptionRoutes from './modules/subscription/subscription.routes.js';
+import voiceRoutes from './routes/voice.routes.js';
 import collectionRoutes from './routes/collection.routes.js';
 import shareRoutes from './routes/share.routes.js';
 import commentRoutes from './routes/comment.routes.js';
@@ -142,6 +143,7 @@ app.get('/api/health/detailed', async (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/voice', voiceRoutes);
 app.use('/api/collections', collectionRoutes);
 app.use('/api/share', shareRoutes);
 app.use('/api/saved-searches', savedSearchRoutes);

@@ -41,7 +41,13 @@ globalThis.fetch = ((url: Parameters<typeof fetch>[0], init: Parameters<typeof f
 
 const app = express();
 
-app.use(helmet());
+// Media (<video>/<audio>/<img>) is consumed cross-origin by the web app in
+// production. Helmet's default same-origin resource policy makes browsers
+// refuse to load it, so videos silently never play. Auth on private media
+// (thumbnails) is still enforced at the route level.
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 app.use(cors({
   origin: config.corsOrigin,
   credentials: true,

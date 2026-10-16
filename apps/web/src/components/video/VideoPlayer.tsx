@@ -49,6 +49,7 @@ export function VideoPlayer({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const seekTo = useCallback(
@@ -69,6 +70,7 @@ export function VideoPlayer({
     const handleLoaded = () => {
       setDuration(video.duration || 0);
       setIsLoading(false);
+      setLoadError(false);
       if (initialTime > 0) {
         video.currentTime = initialTime;
       }
@@ -94,8 +96,14 @@ export function VideoPlayer({
       setVolume(video.volume);
       setIsMuted(video.muted);
     };
+    const handleError = () => {
+      setIsLoading(false);
+      setIsPlaying(false);
+      setLoadError(true);
+    };
 
     video.addEventListener("loadedmetadata", handleLoaded);
+    video.addEventListener("error", handleError);
     video.addEventListener("timeupdate", handleTime);
     video.addEventListener("play", handlePlay);
     video.addEventListener("pause", handlePause);
@@ -105,6 +113,7 @@ export function VideoPlayer({
 
     return () => {
       video.removeEventListener("loadedmetadata", handleLoaded);
+      video.removeEventListener("error", handleError);
       video.removeEventListener("timeupdate", handleTime);
       video.removeEventListener("play", handlePlay);
       video.removeEventListener("pause", handlePause);
@@ -154,6 +163,14 @@ export function VideoPlayer({
     }
   };
 
+  const retryLoad = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    setLoadError(false);
+    setIsLoading(true);
+    video.load();
+  };
+
   const handleMouseMove = () => {
     setShowControls(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -187,7 +204,7 @@ export function VideoPlayer({
         </div>
       )}
 
-      {!isPlaying && !isLoading && (
+      {!isPlaying && !isLoading && !loadError && (
         <button
           onClick={togglePlay}
           className="absolute inset-0 flex items-center justify-center"
@@ -197,6 +214,18 @@ export function VideoPlayer({
             <Play className="h-6 w-6 fill-current ml-0.5" />
           </span>
         </button>
+      )}
+
+      {loadError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 p-4 text-center">
+          <p className="text-sm text-white">This video couldn&apos;t be loaded.</p>
+          <button
+            onClick={retryLoad}
+            className="rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-black hover:bg-white"
+          >
+            Retry
+          </button>
+        </div>
       )}
 
       <div

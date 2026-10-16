@@ -75,6 +75,9 @@ export function VoiceAssistant() {
   const wantRef = useRef(false);
   const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cycleRef = useRef(0);
+  // Consecutive 'network' blips (Chrome throws these spuriously on restart
+  // cycles even with perfect internet). Only give up after several in a row.
+  const netErrRef = useRef<number[]>([]);
 
   // Client-only: zustand-persist rehydrates auth from localStorage after
   // mount, so the server render (signed-out) would mismatch a logged-in
@@ -91,6 +94,7 @@ export function VoiceAssistant() {
 
   const stopListening = useCallback(() => {
     wantRef.current = false;
+    netErrRef.current = [];
     if (restartTimer.current) {
       clearTimeout(restartTimer.current);
       restartTimer.current = null;
@@ -232,6 +236,7 @@ export function VoiceAssistant() {
       setDebug(`cycle ${cycle}: hearing sound`);
     };
     recog.onspeechstart = () => {
+      netErrRef.current = [];
       setDebug(`cycle ${cycle}: speech detected`);
     };
     recog.onresult = (e: SpeechRecognitionEvent) => {
@@ -278,10 +283,22 @@ export function VoiceAssistant() {
         setReply("No microphone found. Check your device and try again.");
         setPhase("idle");
       } else if (e.error === "network") {
-        wantRef.current = false;
-        setHearing(false);
-        setReply("The speech service is unreachable. Check your internet connection and try again.");
-        setPhase("idle");
+        // Chrome fires 'network' spuriously on restart cycles and when its
+        // speech servers hiccup - even with working internet. Retry fresh
+        // cycles a few times before admitting defeat.
+        const now = Date.now();
+        netErrRef.current = [...netErrRef.current.filter((t) => now - t < 30000), now];
+        if (netErrRef.current.length >= 4) {
+          wantRef.current = false;
+          setHearing(false);
+          setReply(
+            "I still can't reach the speech service (your internet works - this is Chrome's recognizer failing). Check for a VPN, ad-blocker or firewall blocking Google's speech servers, then tap the mic to retry."
+          );
+          setPhase("idle");
+        } else {
+          setDebug(`cycle ${cycle}: network blip ${netErrRef.current.length}/4 - retrying`);
+          // keep listening: onend below starts a fresh cycle
+        }
       } else if (e.error === "aborted" || e.error === "no-speech" || e.error === "language-not-supported") {
         if (e.error === "language-not-supported") {
           wantRef.current = false;
@@ -423,6 +440,16 @@ export function VoiceAssistant() {
           <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
             Try “open docker bind mounts”, “search hot reloading”, or “go to clips”.
           </p>
+          <button
+            onClick={() => {
+              stopListening();
+              setOpen(false);
+              router.push("/dashboard/chat");
+            }}
+            className="mt-1 text-[11px] text-primary hover:underline"
+          >
+            Prefer typing? Open chat instead →
+          </button>
           <p className="mt-1 font-mono text-[10px] text-muted-foreground/70">
             mic: {debug}
           </p>

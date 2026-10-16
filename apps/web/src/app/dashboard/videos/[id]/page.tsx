@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useUpload } from "@/hooks/useUpload";
 import { useVideoChat } from "@/hooks/useVideoChat";
 import { useVideoIntelligence } from "@/hooks/useVideoIntelligence";
+import { videoApi } from "@/lib/api";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { VideoTimeline } from "@/components/video/VideoTimeline";
 import { AIFeaturesPanel } from "@/components/video/AIFeaturesPanel";
@@ -43,7 +44,9 @@ export default function VideoDetailPage() {
     moments,
     highlights,
     topics,
-    loading: aiLoading,
+    momentsLoading,
+    highlightsLoading,
+    topicsLoading,
     detectMoments,
     generateHighlights,
     detectTopics,
@@ -57,8 +60,8 @@ export default function VideoDetailPage() {
   
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>("ai");
   const [summary, setSummary] = useState("");
+  const [summaryTopics, setSummaryTopics] = useState<string[]>([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState<"idle" | "processing" | "completed" | "failed">("idle");
 
   const allFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
   const file = allFiles.find((f) => f.id === fileId);
@@ -88,39 +91,44 @@ export default function VideoDetailPage() {
   }, [setCurrentTime]);
 
   const handleFindMoments = async () => {
-    setProcessingStatus("processing");
     try {
       await detectMoments(fileId, undefined, 10);
-    } finally {
-      setProcessingStatus("idle");
+    } catch {
+      // error state lives in the hook
     }
   };
 
   const handleGenerateHighlights = async () => {
-    setProcessingStatus("processing");
     try {
-      const response = await generateHighlights(fileId, undefined, 5);
-      setSummary(response.video_summary);
-    } finally {
-      setProcessingStatus("idle");
+      await generateHighlights(fileId, undefined, 5);
+    } catch {
+      // error state lives in the hook
     }
   };
 
   const handleDetectTopics = async () => {
-    setProcessingStatus("processing");
     try {
       await detectTopics(fileId);
-    } finally {
-      setProcessingStatus("idle");
+    } catch {
+      // error state lives in the hook
     }
   };
 
   const handleGenerateSummary = async () => {
     setSummaryLoading(true);
     try {
-      const response = await generateHighlights(fileId, undefined, 5);
-      setSummary(response.video_summary);
+      // Dedicated summary endpoint (cached server-side) - never the
+      // highlights call, which used to overwrite this tab as a side effect.
+      const response = await videoApi.getSummary(fileId);
+      setSummary(response.summary || "");
+      setSummaryTopics([
+        ...(response.topics ?? []),
+        ...(response.key_themes ?? []),
+      ].slice(0, 8));
       setActiveSidebarTab("summary");
+    } catch {
+      setSummary("");
+      setSummaryTopics([]);
     } finally {
       setSummaryLoading(false);
     }
@@ -300,10 +308,10 @@ export default function VideoDetailPage() {
                 highlights={highlights}
                 topics={topics}
                 summary={summary}
-                processingStatus={processingStatus}
-                momentsLoading={aiLoading}
-                highlightsLoading={aiLoading}
-                topicsLoading={aiLoading}
+                processingStatus="idle"
+                momentsLoading={momentsLoading}
+                highlightsLoading={highlightsLoading}
+                topicsLoading={topicsLoading}
                 summaryLoading={summaryLoading}
                 onFindMoments={handleFindMoments}
                 onGenerateHighlights={handleGenerateHighlights}
@@ -317,7 +325,7 @@ export default function VideoDetailPage() {
             <TabsContent value="summary" className="m-0 flex-1 overflow-hidden">
               <VideoSummary
                 summary={summary}
-                topics={highlights.length > 0 ? highlights.map(h => h.title).slice(0, 5) : []}
+                topics={summaryTopics}
                 duration={file.duration || 0}
                 loading={summaryLoading}
                 onRegenerate={handleGenerateSummary}

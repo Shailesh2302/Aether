@@ -11,12 +11,15 @@ export function useVideoIntelligence() {
   const [moments, setMoments] = useState<VideoMoment[]>([]);
   const [highlights, setHighlights] = useState<VideoHighlight[]>([]);
   const [topics, setTopics] = useState<VideoTopic[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Independent flags per feature: running one must never spin the others.
+  const [momentsLoading, setMomentsLoading] = useState(false);
+  const [highlightsLoading, setHighlightsLoading] = useState(false);
+  const [topicsLoading, setTopicsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const detectMoments = useCallback(
     async (fileId: string, query?: string, topK = 5) => {
-      setLoading(true);
+      setMomentsLoading(true);
       setError(null);
       try {
         const response = await videoIntelligenceApi.getMoments(
@@ -31,7 +34,7 @@ export function useVideoIntelligence() {
         setError(message);
         throw err;
       } finally {
-        setLoading(false);
+        setMomentsLoading(false);
       }
     },
     []
@@ -39,7 +42,7 @@ export function useVideoIntelligence() {
 
   const generateHighlights = useCallback(
     async (fileId: string, categories?: string[], maxHighlights = 5) => {
-      setLoading(true);
+      setHighlightsLoading(true);
       setError(null);
       try {
         const response = await videoIntelligenceApi.getHighlights(
@@ -57,14 +60,14 @@ export function useVideoIntelligence() {
         setError(message);
         throw err;
       } finally {
-        setLoading(false);
+        setHighlightsLoading(false);
       }
     },
     []
   );
 
   const detectTopics = useCallback(async (fileId: string) => {
-    setLoading(true);
+    setTopicsLoading(true);
     setError(null);
     try {
       const response = await videoIntelligenceApi.getTopics(fileId);
@@ -75,7 +78,7 @@ export function useVideoIntelligence() {
       setError(message);
       throw err;
     } finally {
-      setLoading(false);
+      setTopicsLoading(false);
     }
   }, []);
 
@@ -92,7 +95,10 @@ export function useVideoIntelligence() {
     moments,
     highlights,
     topics,
-    loading,
+    loading: momentsLoading || highlightsLoading || topicsLoading,
+    momentsLoading,
+    highlightsLoading,
+    topicsLoading,
     error,
     detectMoments,
     generateHighlights,

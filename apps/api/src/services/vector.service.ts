@@ -48,7 +48,7 @@ class VectorService {
 
   async createCollection(name: string, vectorSize: number): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/collections/${name}`, {
+      const response = await this.fetchWithRetry(`${this.baseUrl}/collections/${name}`, {
         method: 'PUT',
         headers: this.getHeaders(),
         body: JSON.stringify({
@@ -88,7 +88,7 @@ class VectorService {
 
   async upsertPoints(collection: string, points: VectorPoint[]): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/collections/${collection}/points`, {
+      const response = await this.fetchWithRetry(`${this.baseUrl}/collections/${collection}/points`, {
         method: 'PUT',
         headers: this.getHeaders(),
         body: JSON.stringify({
@@ -113,20 +113,35 @@ class VectorService {
     }
   }
 
+  // Free-tier Qdrant sleeps after idle and answers 502 while waking
+  // (30-60s). Ride out the wake window instead of failing the request.
+  private static readonly WAKE_DELAYS_MS = [1000, 2000, 4000, 8000, 15000, 30000];
+
   private async fetchWithRetry(url: string, init: RequestInit, attempts = 2): Promise<Response> {
     let lastError: unknown;
-    for (let i = 0; i < attempts; i++) {
+    const delays = VectorService.WAKE_DELAYS_MS;
+    const rounds = Math.max(attempts, delays.length + 1);
+    for (let i = 0; i < rounds; i++) {
       try {
         const res = await fetch(url, init);
-        // Retry once on transient Qdrant availability errors
-        if (res.status >= 500 && i < attempts - 1) {
+        // Retry on proxy wake-up errors (Render free tier)
+        if (res.status === 502 || res.status === 503 || res.status === 504) {
+          if (i < rounds - 1) {
+            logger.info({ url: url.slice(0, 80), status: res.status, retryIn: delays[Math.min(i, delays.length - 1)] }, 'Qdrant waking, retrying');
+            await res.arrayBuffer().catch(() => undefined);
+            await new Promise((r) => setTimeout(r, delays[Math.min(i, delays.length - 1)]));
+            continue;
+          }
+        } else if (res.status >= 500 && i < attempts - 1) {
           await new Promise((r) => setTimeout(r, 300));
           continue;
         }
         return res;
       } catch (err) {
         lastError = err;
-        if (i < attempts - 1) await new Promise((r) => setTimeout(r, 300));
+        if (i < rounds - 1) {
+          await new Promise((r) => setTimeout(r, delays[Math.min(i, delays.length - 1)]));
+        }
       }
     }
     throw lastError instanceof Error ? lastError : new Error('fetch failed');

@@ -9,7 +9,6 @@ export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(TOKEN_KEY);
 }
-
 export function setToken(token: string): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(TOKEN_KEY, token);
@@ -18,6 +17,26 @@ export function setToken(token: string): void {
 export function clearToken(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(TOKEN_KEY);
+}
+
+/** Origin of the API (no /api suffix), e.g. https://host. Empty in dev. */
+export function apiOrigin(): string {
+  const base = process.env.NEXT_PUBLIC_API_URL || "";
+  return base.replace(/\/api\/?$/, "");
+}
+
+/**
+ * Backend returns media paths relative to the API (/storage/..., /api/...).
+ * In production the web app lives on a different origin and Next rewrites
+ * may not cover it, so absolutize against the API origin. Relative URLs
+ * keep working in local dev.
+ */
+export function resolveMediaUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url) || url.startsWith("blob:") || url.startsWith("data:")) return url;
+  const origin = apiOrigin();
+  if (!origin) return url;
+  return `${origin}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
 export const api: AxiosInstance = axios.create({
@@ -468,7 +487,8 @@ export const filesApi = {
     if (t !== undefined) params.set("t", String(Math.round(t)));
     if (token) params.set("token", token);
     const qs = params.toString();
-    return `/api/files/${id}/thumbnail${qs ? `?${qs}` : ""}`;
+    const rel = `/api/files/${id}/thumbnail${qs ? `?${qs}` : ""}`;
+    return resolveMediaUrl(rel) ?? rel;
   },
 
   async rename(id: string, name: string) {

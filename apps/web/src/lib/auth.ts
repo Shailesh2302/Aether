@@ -26,8 +26,10 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!getToken()) return null;
   try {
     return await authApi.me();
-  } catch {
-    clearToken();
+  } catch (error) {
+    // Only a real 401 means the session is dead; network blips keep it.
+    const status = (error as { response?: { status?: number } })?.response?.status;
+    if (status === 401) clearToken();
     return null;
   }
 }

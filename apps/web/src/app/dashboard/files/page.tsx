@@ -41,7 +41,7 @@ import {
   cn,
 } from "@/lib/utils";
 import type { FileItem } from "@/lib/api";
-import { filesApi, userApi } from "@/lib/api";
+import { filesApi, userApi, resolveMediaUrl } from "@/lib/api";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 
@@ -297,7 +297,7 @@ function FileGridCard({
           <div className="flex items-center opacity-0 transition-opacity group-hover:opacity-100">
             {file.url && (
               <a
-                href={file.url}
+                href={resolveMediaUrl(file.url)}
                 download={file.originalName}
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -378,7 +378,7 @@ function FileListRow({
       </button>
       {file.url && (
         <a
-          href={file.url}
+          href={resolveMediaUrl(file.url)}
           download={file.originalName}
           className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label="Download file"

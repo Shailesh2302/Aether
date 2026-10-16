@@ -38,8 +38,8 @@ export const config = {
 
   jwt: {
     secret: process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-secret-key-change-in-production'),
-    expiresIn: process.env.JWT_EXPIRY || '7d',
-    expiry: process.env.JWT_EXPIRY || '7d',
+    expiresIn: process.env.JWT_EXPIRY || '30d',
+    expiry: process.env.JWT_EXPIRY || '30d',
   },
 
   storage: {

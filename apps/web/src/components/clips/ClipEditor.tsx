@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Play, Check, X, Loader2 } from "lucide-react";
 import type { FileItem } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/api";
 import { ClipTimeline } from "@/components/video/ClipTimeline";
 import { toast } from "@/hooks/use-toast";
 
@@ -99,7 +100,7 @@ export function ClipEditor({ file, onSave, onCancel }: ClipEditorProps) {
         <div className="relative rounded-lg overflow-hidden bg-black">
           <video
             ref={videoRef}
-            src={file.url}
+            src={resolveMediaUrl(file.url)}
             className="w-full aspect-video"
             onClick={togglePlay}
           />

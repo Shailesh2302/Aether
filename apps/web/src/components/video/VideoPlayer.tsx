@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { cn, formatDuration } from "@/lib/utils";
+import { resolveMediaUrl } from "@/lib/api";
 import {
   Play,
   Pause,
@@ -172,8 +173,8 @@ export function VideoPlayer({
     >
       <video
         ref={videoRef}
-        src={src}
-        poster={poster}
+        src={resolveMediaUrl(src)}
+        poster={resolveMediaUrl(poster)}
         className="aspect-video w-full"
         onClick={togglePlay}
         autoPlay={autoPlay}

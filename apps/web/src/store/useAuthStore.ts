@@ -77,12 +77,21 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: false, isAuthenticated: false, user: null });
           return;
         }
-        set({ isLoading: true, isAuthenticated: true });
+        set({ isLoading: true });
         try {
           const user = await authApi.me();
-          set({ user, isLoading: false });
-        } catch {
-          set({ user: null, isLoading: false });
+          set({ user, isLoading: false, isAuthenticated: true });
+        } catch (error: unknown) {
+          // Dead token (401) -> sign out for real. Anything else (offline,
+          // sleeping backend, transient proxy error) keeps the existing
+          // session so reopening the app never boots the user out.
+          const status = (error as { response?: { status?: number } })?.response?.status;
+          if (status === 401) {
+            clearToken();
+            set({ user: null, isLoading: false, isAuthenticated: false });
+          } else {
+            set({ isLoading: false });
+          }
         }
       },
 

@@ -7,6 +7,7 @@ import {
   filesApi,
   chatApi,
   searchApi,
+  resolveMediaUrl,
   type FileItem,
   type SearchResult,
 } from "@/lib/api";
@@ -87,7 +88,9 @@ export default function FileViewerPage() {
   useEffect(() => {
     if (!file || !file.url) return;
     if (file.mimeType.startsWith("text/") || file.mimeType === "text/csv") {
-      fetch(file.url)
+      const url = resolveMediaUrl(file.url);
+      if (!url) return;
+      fetch(url)
         .then((r) => (r.ok ? r.text() : Promise.reject()))
         .then((t) => setTextContent(t))
         .catch(() => setTextContent(null));
@@ -170,7 +173,7 @@ export default function FileViewerPage() {
         </div>
         {file.url && (
           <Button variant="outline" size="sm" asChild>
-            <a href={file.url} download={file.originalName}>
+            <a href={resolveMediaUrl(file.url)} download={file.originalName}>
               <Download className="h-4 w-4 mr-2" />
               Download
             </a>
@@ -196,7 +199,7 @@ export default function FileViewerPage() {
             <CardContent className="p-4">
               {file.mimeType === "application/pdf" && file.url ? (
                 <iframe
-                  src={file.url}
+                  src={resolveMediaUrl(file.url)}
                   title={file.originalName}
                   className="h-[70vh] w-full rounded-md border"
                 />
@@ -207,7 +210,7 @@ export default function FileViewerPage() {
               ) : file.mimeType.startsWith("audio/") && file.url ? (
                 <div className="flex flex-col items-center gap-4 py-10">
                   <Music className="h-12 w-12 text-muted-foreground/50" />
-                  <audio controls src={file.url} className="w-full max-w-lg" />
+                  <audio controls src={resolveMediaUrl(file.url)} className="w-full max-w-lg" />
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3 py-12 text-center">
@@ -217,7 +220,7 @@ export default function FileViewerPage() {
                   </p>
                   {file.url && (
                     <Button asChild>
-                      <a href={file.url} download={file.originalName}>
+                      <a href={resolveMediaUrl(file.url)} download={file.originalName}>
                         <Download className="h-4 w-4 mr-2" />
                         Download to view
                       </a>

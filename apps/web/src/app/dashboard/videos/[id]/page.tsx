@@ -5,7 +5,12 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useUpload } from "@/hooks/useUpload";
 import { useVideoChat } from "@/hooks/useVideoChat";
 import { useVideoIntelligence } from "@/hooks/useVideoIntelligence";
-import { videoApi } from "@/lib/api";
+import { videoApi, type SubtitleTrack } from "@/lib/api";
+import { NotesPanel } from "@/components/notes/NotesPanel";
+import { ShareDialog } from "@/components/share/ShareDialog";
+import { ChaptersList } from "@/components/video/ChaptersList";
+import { TranslateBar } from "@/components/video/TranslateBar";
+import { ExportMenu } from "@/components/video/ExportMenu";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { VideoTimeline } from "@/components/video/VideoTimeline";
 import { AIFeaturesPanel } from "@/components/video/AIFeaturesPanel";
@@ -14,21 +19,23 @@ import { SmartClipsList } from "@/components/video/SmartClipsList";
 import { VideoSummary } from "@/components/video/VideoSummary";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  ArrowLeft, 
-  Loader2, 
-  Sparkles, 
-  MessageSquare, 
+import {
+  ArrowLeft,
+  Loader2,
+  Sparkles,
+  MessageSquare,
   Scissors,
   FileText,
   Settings,
   Brain,
   Clock,
   Zap,
-  Lightbulb
+  Lightbulb,
+  StickyNote,
+  Share2,
 } from "lucide-react";
 
-type SidebarTab = "ai" | "summary" | "ask" | "clips";
+type SidebarTab = "ai" | "summary" | "ask" | "clips" | "notes";
 
 export default function VideoDetailPage() {
   const params = useParams();
@@ -62,6 +69,8 @@ export default function VideoDetailPage() {
   const [summary, setSummary] = useState("");
   const [summaryTopics, setSummaryTopics] = useState<string[]>([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [subtitles, setSubtitles] = useState<SubtitleTrack[]>([]);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const allFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
   const file = allFiles.find((f) => f.id === fileId);
@@ -228,14 +237,23 @@ export default function VideoDetailPage() {
             <Clock className="h-4 w-4" />
             Status
           </Button>
-          <Button 
-            variant="default" 
+          <Button
+            variant="default"
             size="sm"
             onClick={() => router.push(`/dashboard/videos/${fileId}/intelligence`)}
             className="gap-1 shrink-0"
           >
             <Brain className="h-4 w-4" />
             All AI
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShareOpen(true)}
+            className="gap-1 shrink-0"
+          >
+            <Share2 className="h-4 w-4" />
+            Share
           </Button>
         </div>
         <Button variant="ghost" size="icon">
@@ -255,6 +273,7 @@ export default function VideoDetailPage() {
                 initialTime={0}
                 onTimeUpdate={handleTimeUpdate}
                 onReady={handlePlayerReady}
+                subtitles={subtitles}
                 className="w-full"
               />
             ) : (
@@ -284,52 +303,73 @@ export default function VideoDetailPage() {
         <div className="w-[400px] border-l flex flex-col">
           {/* Sidebar Tabs */}
           <Tabs value={activeSidebarTab} onValueChange={(v) => setActiveSidebarTab(v as SidebarTab)}>
-            <TabsList className="w-full grid grid-cols-4 rounded-none">
-              <TabsTrigger value="ai" className="text-xs">
-                <Sparkles className="h-4 w-4" />
-              </TabsTrigger>
-              <TabsTrigger value="summary" className="text-xs">
-                <FileText className="h-4 w-4" />
-              </TabsTrigger>
-              <TabsTrigger value="ask" className="text-xs">
-                <MessageSquare className="h-4 w-4" />
-              </TabsTrigger>
-              <TabsTrigger value="clips" className="text-xs">
-                <Scissors className="h-4 w-4" />
-              </TabsTrigger>
-            </TabsList>
+          <TabsList className="w-full grid grid-cols-5 rounded-none">
+            <TabsTrigger value="ai" className="text-xs">
+              <Sparkles className="h-4 w-4" />
+            </TabsTrigger>
+            <TabsTrigger value="summary" className="text-xs">
+              <FileText className="h-4 w-4" />
+            </TabsTrigger>
+            <TabsTrigger value="ask" className="text-xs">
+              <MessageSquare className="h-4 w-4" />
+            </TabsTrigger>
+            <TabsTrigger value="clips" className="text-xs">
+              <Scissors className="h-4 w-4" />
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="text-xs">
+              <StickyNote className="h-4 w-4" />
+            </TabsTrigger>
+          </TabsList>
 
             <TabsContent value="ai" className="m-0 flex-1 overflow-hidden">
-              <AIFeaturesPanel
-                fileId={fileId}
-                fileName={file.name}
-                duration={file.duration || 0}
-                moments={moments}
-                highlights={highlights}
-                topics={topics}
-                summary={summary}
-                processingStatus="idle"
-                momentsLoading={momentsLoading}
-                highlightsLoading={highlightsLoading}
-                topicsLoading={topicsLoading}
-                summaryLoading={summaryLoading}
-                onFindMoments={handleFindMoments}
-                onGenerateHighlights={handleGenerateHighlights}
-                onDetectTopics={handleDetectTopics}
-                onGenerateSummary={handleGenerateSummary}
-                onSeek={handleSeek}
-                onAskQuestion={() => setActiveSidebarTab("ask")}
-              />
+              <div className="flex h-full flex-col">
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <AIFeaturesPanel
+                    fileId={fileId}
+                    fileName={file.name}
+                    duration={file.duration || 0}
+                    moments={moments}
+                    highlights={highlights}
+                    topics={topics}
+                    summary={summary}
+                    processingStatus="idle"
+                    momentsLoading={momentsLoading}
+                    highlightsLoading={highlightsLoading}
+                    topicsLoading={topicsLoading}
+                    summaryLoading={summaryLoading}
+                    onFindMoments={handleFindMoments}
+                    onGenerateHighlights={handleGenerateHighlights}
+                    onDetectTopics={handleDetectTopics}
+                    onGenerateSummary={handleGenerateSummary}
+                    onSeek={handleSeek}
+                    onAskQuestion={() => setActiveSidebarTab("ask")}
+                  />
+                </div>
+                <div className="space-y-3 border-t p-3">
+                  <ChaptersList highlights={highlights} moments={moments} onSeek={handleSeek} />
+                  <TranslateBar
+                    fileId={fileId}
+                    onSubtitles={(track) => setSubtitles(track ? [track] : [])}
+                  />
+                </div>
+              </div>
             </TabsContent>
 
             <TabsContent value="summary" className="m-0 flex-1 overflow-hidden">
-              <VideoSummary
-                summary={summary}
-                topics={summaryTopics}
-                duration={file.duration || 0}
-                loading={summaryLoading}
-                onRegenerate={handleGenerateSummary}
-              />
+              <div className="flex h-full flex-col">
+                <div className="border-b p-3">
+                  <ExportMenu fileId={fileId} hasSummary={summary.length > 0} />
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <VideoSummary
+                    summary={summary}
+                    topics={summaryTopics}
+                    duration={file.duration || 0}
+                    loading={summaryLoading}
+                    onRegenerate={handleGenerateSummary}
+                  />
+                </div>
+              </div>
             </TabsContent>
 
             <TabsContent value="ask" className="m-0 flex-1 overflow-hidden">
@@ -348,9 +388,21 @@ export default function VideoDetailPage() {
                 onSeekToTime={handleSeek}
               />
             </TabsContent>
+
+            <TabsContent value="notes" className="m-0 flex-1 overflow-hidden">
+              <div className="h-full overflow-y-auto p-3">
+                <NotesPanel fileId={fileId} currentTime={currentTime} onSeek={handleSeek} />
+              </div>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
+      <ShareDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        fileId={fileId}
+        title={file.originalName}
+      />
     </div>
   );
 }

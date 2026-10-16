@@ -22,6 +22,12 @@ export interface VideoPlayerHandle {
   pause: () => void;
 }
 
+export interface SubtitleTrack {
+  src: string;
+  lang: string;
+  label: string;
+}
+
 interface VideoPlayerProps {
   src: string;
   poster?: string;
@@ -29,6 +35,7 @@ interface VideoPlayerProps {
   initialTime?: number;
   /** When set, playback pauses automatically at this time (clip preview). */
   stopAt?: number;
+  subtitles?: SubtitleTrack[];
   className?: string;
   onReady?: (handle: VideoPlayerHandle) => void;
   autoPlay?: boolean;
@@ -40,6 +47,7 @@ export function VideoPlayer({
   onTimeUpdate,
   initialTime = 0,
   stopAt,
+  subtitles,
   className,
   onReady,
   autoPlay = false,
@@ -208,7 +216,12 @@ export function VideoPlayer({
         onClick={togglePlay}
         autoPlay={autoPlay}
         playsInline
-      />
+        crossOrigin="anonymous"
+      >
+        {(subtitles ?? []).map((t) => (
+          <track key={`${t.lang}-${t.src}`} kind="subtitles" srcLang={t.lang} label={t.label} src={t.src} default={subtitles?.length === 1} />
+        ))}
+      </video>
 
       {isLoading && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30">

@@ -24,6 +24,10 @@ model User {
   messages      Message[]
   jobs          Job[]
   subscription  Subscription?
+  collections   Collection[]
+  shareLinks    ShareLink[]
+  savedSearches SavedSearch[]
+  comments      Comment[]
 
   @@map("users")
 }
@@ -39,15 +43,21 @@ model File {
   path          String
   url           String?
   metadata      Json?
-  
+  tags          String[]  @default([])
+  isFavorite    Boolean   @default(false)
+  sourceUrl     String?
+
   status        FileStatus @default(PENDING)
   processingJob String?
-  
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   sessions      Session[]
   clips         Clip[]
+  collections   CollectionFile[]
+  shareLinks    ShareLink[]
+  comments      Comment[]
 
   @@index([userId])
   @@index([status])
@@ -185,6 +195,80 @@ enum ClipStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+model Collection {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  files         CollectionFile[]
+
+  @@index([userId])
+  @@map("collections")
+}
+
+model CollectionFile {
+  id            String    @id @default(uuid())
+  collectionId  String
+  collection    Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  fileId        String
+  file          File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+
+  @@unique([collectionId, fileId])
+  @@index([fileId])
+  @@map("collection_files")
+}
+
+model ShareLink {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileId        String?
+  file          File?     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  clipId        String?
+  token         String    @unique
+  expiresAt     DateTime?
+  viewCount     Int       @default(0)
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([fileId])
+  @@map("share_links")
+}
+
+model SavedSearch {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query         String
+  lastCount     Int       @default(0)
+  lastCheckedAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@map("saved_searches")
+}
+
+model Comment {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileId        String
+  file          File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  timestampSec  Float?
+  text          String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([fileId])
+  @@map("comments")
 }
 
 model Subscription {

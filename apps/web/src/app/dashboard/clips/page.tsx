@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { clipsApi, videoApi, filesApi, type Clip, type FileItem, type SmartClip } from "@/lib/api";
+import { clipsApi, videoApi, filesApi, resolveMediaUrl, type Clip, type FileItem, type SmartClip } from "@/lib/api";
 import { useUpload } from "@/hooks/useUpload";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,7 @@ import {
   Sparkles,
   Download,
   Zap,
+  Film,
 } from "lucide-react";
 import {
   Dialog,
@@ -57,6 +58,23 @@ export default function ClipsPage() {
   const [highlightsError, setHighlightsError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ clip: SmartClip; fileId: string } | null>(null);
   const [gettingClip, setGettingClip] = useState<string | null>(null);
+  const [gifId, setGifId] = useState<string | null>(null);
+
+  const handleGif = async (clip: Clip) => {
+    setGifId(clip.id);
+    try {
+      const { gifUrl } = await clipsApi.gif(clip.id);
+      const a = document.createElement("a");
+      a.href = resolveMediaUrl(gifUrl) ?? gifUrl;
+      a.download = `${clip.title || "clip"}.gif`;
+      a.click();
+      toast({ title: "GIF downloaded" });
+    } catch {
+      toast({ title: "GIF failed", description: "The clip may still be processing", variant: "destructive" });
+    } finally {
+      setGifId(null);
+    }
+  };
 
   const fileList = useMemo(() => (Array.isArray(files) ? files : []), [files]);
   const videos = useMemo(
@@ -459,6 +477,21 @@ export default function ClipsPage() {
                     <Badge variant={getStatusColor(clip.status)}>
                       {getStatusLabel(clip.status)}
                     </Badge>
+                    {clip.status === "COMPLETED" && (
+                      <button
+                        onClick={() => handleGif(clip)}
+                        disabled={gifId === clip.id}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                        aria-label="Download GIF"
+                        title="Download GIF"
+                      >
+                        {gifId === clip.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Film className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(clip)}
                       className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"

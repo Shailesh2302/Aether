@@ -4,8 +4,12 @@ import { prisma } from '../config/db.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { requireSubscription } from '../middleware/subscription.js';
 import { queueService } from '../services/queue.service.js';
+import { generateGif } from '../utils/ffmpeg.js';
+import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
 
@@ -126,8 +130,61 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response, next: N
   }
 });
 
-router.delete('/:id', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
+/**
+ * Render a GIF preview of a COMPLETED clip (cached in clip metadata).
+ *   POST /api/clips/:id/gif
+ */
+router.post(
+  '/:id/gif',
+  authenticate,
+  requireSubscription,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const clip = await prisma.clip.findFirst({
+        where: { id: req.params.id, userId: req.user!.userId },
+        include: { file: { select: { path: true } } },
+      });
+      if (!clip) return res.status(404).json({ error: 'Clip not found' });
+      if (clip.status !== 'COMPLETED' || !clip.videoUrl) {
+        return res.status(409).json({ error: 'Clip is still processing - try again shortly' });
+      }
+
+      const meta = (clip.metadata as Record<string, unknown> | null) ?? {};
+      const cached = typeof meta.gifUrl === 'string' ? meta.gifUrl : null;
+      const clipsDir = path.resolve(config.storage.clipsDir);
+      if (cached) {
+        const cachedFile = path.join(clipsDir, path.basename(cached));
+        if (fs.existsSync(cachedFile)) {
+          return res.json({ clip: { ...clip, gifUrl: cached }, gifUrl: cached });
+        }
+      }
+
+      // Resolve the cut file on disk (videoUrl may be absolute or relative).
+      const fileName = path.basename(clip.videoUrl.split('?')[0]);
+      const clipPath = path.join(clipsDir, fileName);
+      if (!fs.existsSync(clipPath)) {
+        return res.status(404).json({ error: 'Clip file not found on disk' });
+      }
+
+      const gifName = `${clip.id}.gif`;
+      const gifPath = path.join(clipsDir, gifName);
+      if (!fs.existsSync(gifPath)) {
+        await generateGif(clipPath, gifPath, 0, Math.min(Number(clip.endTime) - Number(clip.startTime), 15));
+      }
+      const gifUrl = `/storage/clips/${gifName}`;
+      await prisma.clip.update({
+        where: { id: clip.id },
+        data: { metadata: { ...meta, gifUrl } },
+      }).catch(() => undefined);
+      res.json({ gifUrl });
+    } catch (error) {
+      logger.error({ error }, 'GIF generation failed');
+      next(error);
+    }
+  }
+);
+
+router.delete('/:id', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {  try {
     const clip = await prisma.clip.findFirst({
       where: { id: req.params.id, userId: req.user!.userId },
     });

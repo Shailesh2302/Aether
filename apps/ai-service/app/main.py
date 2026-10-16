@@ -32,7 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.api.routes import chat, embeddings, search, transcription, health, documents, video_intelligence
+from app.api.routes import chat, embeddings, search, transcription, health, documents, video_intelligence, import_media
 
 
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)
@@ -42,3 +42,4 @@ app.include_router(search.router, prefix=settings.API_V1_PREFIX)
 app.include_router(transcription.router, prefix=settings.API_V1_PREFIX)
 app.include_router(documents.router, prefix=settings.API_V1_PREFIX)
 app.include_router(video_intelligence.router, prefix=settings.API_V1_PREFIX)
+app.include_router(import_media.router, prefix=settings.API_V1_PREFIX)

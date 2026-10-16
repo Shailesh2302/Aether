@@ -3,7 +3,10 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useUpload } from "@/hooks/useUpload";
+import { filesApi, extractErrorMessage } from "@/lib/api";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
   AlertCircle,
@@ -14,6 +17,8 @@ import {
   Music,
   Image as ImageIcon,
   ArrowUpRight,
+  Link2,
+  Loader2,
 } from "lucide-react";
 import { cn, formatFileSize } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -31,6 +36,8 @@ export default function UploadPage() {
   const { uploadFile, uploads, clearUploads, removeUpload } = useUpload();
   const [isDragging, setIsDragging] = useState(false);
   const [dragCounter, setDragCounter] = useState(0);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const handleFiles = useCallback(
     async (list: FileList | null) => {
@@ -60,6 +67,25 @@ export default function UploadPage() {
   );
 
   const doneCount = uploads.filter((u) => u.status === "success").length;
+
+  const handleImport = async () => {
+    const url = importUrl.trim();
+    if (!url || importing) return;
+    setImporting(true);
+    try {
+      const file = await filesApi.importUrl(url);
+      toast({ title: "Import started", description: file.originalName });
+      setImportUrl("");
+    } catch (error) {
+      toast({
+        title: "Import failed",
+        description: extractErrorMessage(error, "Could not import this URL"),
+        variant: "destructive",
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
@@ -127,6 +153,33 @@ export default function UploadPage() {
             ))}
           </div>
           <p className="mt-4 mono-label">MAX 500 MB / FILE</p>
+        </div>
+      </div>
+
+      {/* Import from link */}
+      <div className="reveal mt-8 border border-border p-5">
+        <div className="mb-1 flex items-center gap-2">
+          <Link2 className="h-4 w-4 text-muted-foreground" />
+          <h2 className="font-display text-sm font-semibold">Import from link</h2>
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          YouTube, Vimeo or a direct media/PDF link. Download and processing run in the background.
+        </p>
+        <div className="flex gap-2">
+          <Input
+            value={importUrl}
+            onChange={(e) => setImportUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleImport();
+              }
+            }}
+            placeholder="https://youtube.com/watch?v=…"
+          />
+          <Button onClick={handleImport} disabled={!importUrl.trim() || importing}>
+            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Import"}
+          </Button>
         </div>
       </div>
 

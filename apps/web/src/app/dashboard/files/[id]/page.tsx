@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { NotesPanel } from "@/components/notes/NotesPanel";
 import { Spinner } from "@/components/ui/spinner";
 import {
   ArrowLeft,
@@ -29,7 +30,7 @@ import {
   Music,
 } from "lucide-react";
 
-type ViewerTab = "preview" | "chat" | "find";
+type ViewerTab = "preview" | "chat" | "find" | "notes";
 
 interface ChatMsg {
   id: string;
@@ -194,10 +195,11 @@ export default function FileViewerPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as ViewerTab)}>
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className="grid w-full max-w-lg grid-cols-4">
           <TabsTrigger value="preview">Preview</TabsTrigger>
           <TabsTrigger value="chat">Chat with file</TabsTrigger>
           <TabsTrigger value="find">Search within</TabsTrigger>
+          <TabsTrigger value="notes">Notes</TabsTrigger>
         </TabsList>
 
         <TabsContent value="preview" className="mt-4">
@@ -331,6 +333,14 @@ export default function FileViewerPage() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notes" className="mt-4">
+          <Card>
+            <CardContent className="p-4">
+              <NotesPanel fileId={file.id} />
             </CardContent>
           </Card>
         </TabsContent>

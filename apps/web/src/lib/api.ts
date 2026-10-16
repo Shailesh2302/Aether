@@ -101,8 +101,177 @@ export function isSubscriptionRequired(error: unknown): boolean {
 }
 
 // ============================================================================
-// Subscription / Billing API
+// Collections API
 // ============================================================================
+
+export interface CollectionSummary {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { files: number };
+  files?: Array<{ id: string; originalName: string; mimeType: string; status: string }>;
+}
+
+export interface CollectionDetail extends CollectionSummary {
+  files: FileItem[];
+}
+
+export const collectionsApi = {
+  async list(): Promise<CollectionSummary[]> {
+    const { data } = await api.get<{ collections: CollectionSummary[] }>("/collections");
+    return data.collections ?? [];
+  },
+
+  async create(name: string, description?: string) {
+    const { data } = await api.post<{ collection: CollectionSummary }>("/collections", { name, description });
+    return data.collection;
+  },
+
+  async get(id: string): Promise<CollectionDetail> {
+    const { data } = await api.get<{ collection: CollectionDetail }>(`/collections/${id}`);
+    return data.collection;
+  },
+
+  async remove(id: string) {
+    await api.delete(`/collections/${id}`);
+  },
+
+  async addFile(id: string, fileId: string) {
+    await api.post(`/collections/${id}/files`, { fileId });
+  },
+
+  async removeFile(id: string, fileId: string) {
+    await api.delete(`/collections/${id}/files/${fileId}`);
+  },
+};
+
+// ============================================================================
+// Share API
+// ============================================================================
+
+export interface ShareLink {
+  id: string;
+  fileId: string | null;
+  clipId: string | null;
+  token: string;
+  url: string;
+  expiresAt: string | null;
+  viewCount: number;
+  createdAt: string;
+  file?: { id: string; originalName: string; mimeType: string } | null;
+}
+
+export interface ResolvedShare {
+  link: { token: string; expiresAt: string | null; viewCount: number };
+  file?: {
+    id: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    url: string | null;
+    status: string;
+    createdAt: string;
+  };
+  clip?: Clip & { file?: { id: string; originalName: string; mimeType: string } | null };
+}
+
+export const shareApi = {
+  async create(payload: { fileId?: string; clipId?: string; expiresInDays?: number }): Promise<ShareLink> {
+    const { data } = await api.post<{ link: ShareLink }>("/share", payload);
+    return data.link;
+  },
+
+  async list(): Promise<ShareLink[]> {
+    const { data } = await api.get<{ links: ShareLink[] }>("/share");
+    return data.links ?? [];
+  },
+
+  async remove(id: string) {
+    await api.delete(`/share/${id}`);
+  },
+
+  async resolve(token: string): Promise<ResolvedShare> {
+    const { data } = await api.get<ResolvedShare>(`/share/resolve/${token}`);
+    return data;
+  },
+
+  fullUrl(token: string) {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/s/${token}`;
+    }
+    return `/s/${token}`;
+  },
+};
+
+// ============================================================================
+// Comments API
+// ============================================================================
+
+export interface FileComment {
+  id: string;
+  userId: string;
+  fileId: string;
+  timestampSec: number | null;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const commentsApi = {
+  async list(fileId: string): Promise<FileComment[]> {
+    const { data } = await api.get<{ comments: FileComment[] }>(`/files/${fileId}/comments`);
+    return data.comments ?? [];
+  },
+
+  async create(fileId: string, text: string, timestampSec?: number): Promise<FileComment> {
+    const { data } = await api.post<{ comment: FileComment }>(`/files/${fileId}/comments`, {
+      text,
+      ...(timestampSec !== undefined ? { timestampSec } : {}),
+    });
+    return data.comment;
+  },
+
+  async remove(id: string) {
+    await api.delete(`/comments/${id}`);
+  },
+};
+
+// ============================================================================
+// Saved searches API
+// ============================================================================
+
+export interface SavedSearch {
+  id: string;
+  userId: string;
+  query: string;
+  lastCount: number;
+  lastCheckedAt: string;
+  createdAt: string;
+}
+
+export const savedSearchApi = {
+  async list(): Promise<SavedSearch[]> {
+    const { data } = await api.get<{ searches: SavedSearch[] }>("/saved-searches");
+    return data.searches ?? [];
+  },
+
+  async create(query: string): Promise<SavedSearch> {
+    const { data } = await api.post<{ search: SavedSearch }>("/saved-searches", { query });
+    return data.search;
+  },
+
+  async remove(id: string) {
+    await api.delete(`/saved-searches/${id}`);
+  },
+
+  async check(id: string): Promise<{ search: SavedSearch; newHits: number; totalHits: number }> {
+    const { data } = await api.post(`/saved-searches/${id}/check`);
+    return data as { search: SavedSearch; newHits: number; totalHits: number };
+  },
+};
 
 export type BillingPlanId = "PLAN_3_MONTH" | "PLAN_6_MONTH" | "PLAN_12_MONTH";
 
@@ -132,6 +301,10 @@ export interface SubscriptionStatus {
   trialDays: number;
   paymentsConfigured: boolean;
 }
+
+// ============================================================================
+// Subscription / Billing API
+// ============================================================================
 
 export const subscriptionApi = {
   async plans(): Promise<PlansResponse> {
@@ -199,6 +372,9 @@ export interface FileItem {
   status: FileStatus;
   processingJob?: string | null;
   metadata?: Record<string, unknown> | null;
+  tags?: string[];
+  isFavorite?: boolean;
+  sourceUrl?: string | null;
   userId: string;
   createdAt: string;
   updatedAt: string;
@@ -515,6 +691,31 @@ export const filesApi = {
     if ("file" in data) return data.file;
     return data;
   },
+
+  async setTags(id: string, tags: string[]) {
+    const { data } = await api.patch<{ file: FileItem } | FileItem>(`/files/${id}`, { tags });
+    if ("file" in data) return data.file;
+    return data;
+  },
+
+  async setFavorite(id: string, isFavorite: boolean) {
+    const { data } = await api.patch<{ file: FileItem } | FileItem>(`/files/${id}`, { isFavorite });
+    if ("file" in data) return data.file;
+    return data;
+  },
+
+  exportUrl(id: string, format: "txt" | "srt" | "vtt" | "md" | "json") {
+    const token = typeof window !== "undefined" ? getToken() : null;
+    const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+    const origin = apiOrigin();
+    return `${origin}/api/files/${id}/export/${format}${qs}`;
+  },
+
+  async importUrl(url: string) {
+    const { data } = await api.post<{ file: FileItem } | FileItem>("/files/import", { url });
+    if ("file" in data) return data.file;
+    return data;
+  },
 };
 
 // ============================================================================
@@ -601,6 +802,11 @@ export const clipsApi = {
     return data;
   },
 
+  async gif(id: string): Promise<{ gifUrl: string }> {
+    const { data } = await api.post<{ gifUrl: string }>(`/clips/${id}/gif`);
+    return data;
+  },
+
   /** Poll until a generated clip finishes cutting (or fails/times out). */
   async waitUntilReady(id: string, timeoutMs = 120_000): Promise<Clip> {
     const start = Date.now();
@@ -668,7 +874,6 @@ export const videoApi = {
     );
     return data;
   },
-
   async getStatus(fileId: string): Promise<VideoStatusResponse> {
     const { data } = await api.get<VideoStatusResponse>(
       `/video-features/status/${fileId}`
@@ -702,4 +907,49 @@ export const videoApi = {
     }
     return response.body;
   },
+
+  async translate(
+    fileId: string,
+    targetLang: string
+  ): Promise<TranslatedTranscript> {
+    const { data } = await api.post<TranslatedTranscript>(
+      "/video-features/translate",
+      { fileId, targetLang }
+    );
+    return data;
+  },
 };
+
+export interface TranslatedSegment {
+  start_sec: number;
+  end_sec: number;
+  text: string;
+}
+
+export interface SubtitleTrack {
+  src: string;
+  lang: string;
+  label: string;
+}
+
+export interface TranslatedTranscript {
+  file_id: string;
+  target_lang: string;
+  source_lang: string;
+  segments: TranslatedSegment[];
+}
+
+export function segmentsToVtt(segments: TranslatedSegment[]): string {
+  const stamp = (sec: number) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    const ms = Math.floor((sec % 1) * 1000);
+    const p = (n: number, l = 2) => String(n).padStart(l, "0");
+    return `${p(h)}:${p(m)}:${p(s)}.${p(ms, 3)}`;
+  };
+  return (
+    "WEBVTT\n\n" +
+    segments.map((g) => `${stamp(g.start_sec)} --> ${stamp(g.end_sec)}\n${g.text}\n`).join("\n")
+  );
+}

@@ -18,8 +18,11 @@ import {
   ArrowRight,
   Lightbulb,
   Sparkles,
+  Loader2,
+  BellPlus,
 } from "lucide-react";
 import { formatDuration, getFileCategory } from "@/lib/utils";
+import { SavedSearches, useSaveSearch } from "@/components/search/SavedSearches";
 import type { SearchResult } from "@/lib/api";
 
 const SUGGESTIONS = [
@@ -41,6 +44,11 @@ const TIPS = [
 export default function SearchPage() {
   const { query, results, isLoading, error, search, clearResults } = useSearch();
   const [input, setInput] = useState("");
+  const { save: saveCurrentSearch, saving } = useSaveSearch();
+
+  const saveCurrent = () => {
+    if (query.trim()) void saveCurrentSearch(query.trim());
+  };
 
   // Deep-link support: /search?q=... (used by the voice assistant).
   useEffect(() => {
@@ -111,9 +119,17 @@ export default function SearchPage() {
                 ? "Searching…"
                 : `${results.length} result${results.length === 1 ? "" : "s"} for "${query}"`}
             </p>
-            <Button variant="ghost" size="sm" onClick={clearResults}>
-              Clear
-            </Button>
+            <div className="flex items-center gap-2">
+              {!isLoading && results.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={saveCurrent} disabled={saving}>
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BellPlus className="h-3.5 w-3.5" />}
+                  Track
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={clearResults}>
+                Clear
+              </Button>
+            </div>
           </div>
 
           {isLoading ? (
@@ -138,6 +154,7 @@ export default function SearchPage() {
         </div>
       ) : (
         <div className="space-y-6">
+          <SavedSearches onRun={handleSuggestion} />
           <div>
             <h2 className="text-sm font-medium mb-3">Try a search</h2>
             <div className="flex flex-wrap gap-2">

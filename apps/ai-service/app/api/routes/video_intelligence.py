@@ -558,6 +558,109 @@ async def get_video_status(
         )
 
 
+class TranslateRequest(BaseModel):
+    file_id: str
+    user_id: str
+    target_lang: str = Field(description="Target language, e.g. 'Hindi', 'Spanish', 'French'")
+    collection: Optional[str] = None
+
+
+class TranslatedSegment(BaseModel):
+    start_sec: float
+    end_sec: float
+    text: str
+
+
+class TranslateResponse(BaseModel):
+    file_id: str
+    target_lang: str
+    source_lang: str
+    segments: List[TranslatedSegment]
+
+
+@router.post("/translate", response_model=TranslateResponse)
+async def translate_transcript(
+    request: TranslateRequest,
+    api_key: API_KEY_DEP = None,
+) -> TranslateResponse:
+    """
+    Translate a video's transcript segments, preserving timestamps so the
+    result can be used as subtitles or exported as SRT/VTT.
+    """
+    from app.services.vector_service import vector_service as vs
+
+    collection = request.collection or f"user_{request.user_id}".replace("-", "_")
+    points = await vs.get_collection_points(collection, request.file_id, limit=200)
+
+    segments: List[Dict[str, Any]] = []
+    source_lang = "unknown"
+    for p in points:
+        meta = (p.get("payload") or {}).get("metadata") or {}
+        if meta.get("transcript_language"):
+            source_lang = meta["transcript_language"]
+        for s in meta.get("segments") or []:
+            if isinstance(s, dict) and str(s.get("text", "")).strip():
+                segments.append({
+                    "start_sec": float(s.get("start_sec", 0)),
+                    "end_sec": float(s.get("end_sec", 0)),
+                    "text": str(s.get("text", "")).strip(),
+                })
+    # De-duplicate (segments repeat across chunks) while keeping order.
+    seen = set()
+    unique: List[Dict[str, Any]] = []
+    for s in sorted(segments, key=lambda x: x["start_sec"]):
+        if s["text"] not in seen:
+            seen.add(s["text"])
+            unique.append(s)
+    segments = unique[:300]
+
+    if not segments:
+        return TranslateResponse(
+            file_id=request.file_id, target_lang=request.target_lang,
+            source_lang=source_lang, segments=[],
+        )
+
+    # Translate in batches to stay within context limits.
+    translated: List[TranslatedSegment] = []
+    BATCH = 20
+    for i in range(0, len(segments), BATCH):
+        batch = segments[i:i + BATCH]
+        numbered = "\n".join(f"[{n}] {s['text']}" for n, s in enumerate(batch))
+        prompt = (
+            f"Translate the following transcript lines into {request.target_lang}. "
+            f"Keep the exact same line count and order, keep each line's [N] prefix, "
+            f"translate naturally for subtitles (short lines OK). "
+            f"Return ONLY the numbered lines, nothing else.\n\n{numbered}"
+        )
+        try:
+            response = await llm_service.generate_response(
+                query=f"Translate these {len(batch)} lines into {request.target_lang}.",
+                context="",
+                system_prompt=prompt,
+            )
+        except Exception as e:
+            app_logger.error(f"Translation batch failed: {e}")
+            raise
+
+        import re as _re
+        lines = [ln.strip() for ln in response.strip().split("\n") if ln.strip()]
+        for n, s in enumerate(batch):
+            text = s["text"]
+            for ln in lines:
+                m = _re.match(rf"\[{n}\]\s*(.*)", ln)
+                if m:
+                    text = m.group(1).strip() or text
+                    break
+            translated.append(TranslatedSegment(
+                start_sec=s["start_sec"], end_sec=s["end_sec"], text=text,
+            ))
+
+    return TranslateResponse(
+        file_id=request.file_id, target_lang=request.target_lang,
+        source_lang=source_lang, segments=translated,
+    )
+
+
 class SmartClipsRequest(BaseModel):
     file_id: str
     user_id: str

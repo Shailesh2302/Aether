@@ -163,6 +163,50 @@ export async function trimVideo(
   return outputPath;
 }
 
+export async function generateGif(
+  videoPath: string,
+  outputPath: string,
+  startTime: number,
+  endTime: number,
+  width = 320,
+  fps = 10
+): Promise<string> {
+  const duration = Math.min(Math.max(endTime - startTime, 0.5), 15);
+  const { spawn } = await import('child_process');
+
+  // Two-pass palette for decent quality at small size.
+  const palettePath = `${outputPath}.palette.png`;
+  const run = (args: string[]) =>
+    new Promise<void>((resolve, reject) => {
+      const ffmpeg = spawn('ffmpeg', args);
+      ffmpeg.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited with code ${code}`))));
+      ffmpeg.on('error', reject);
+    });
+
+  try {
+    await run([
+      '-y',
+      '-ss', String(Math.max(startTime, 0)),
+      '-t', String(duration),
+      '-i', videoPath,
+      '-vf', `fps=${fps},scale=${width}:-1:flags=lanczos,palettegen`,
+      palettePath,
+    ]);
+    await run([
+      '-y',
+      '-ss', String(Math.max(startTime, 0)),
+      '-t', String(duration),
+      '-i', videoPath,
+      '-i', palettePath,
+      '-lavfi', `fps=${fps},scale=${width}:-1:flags=lanczos [x]; [x][1:v] paletteuse`,
+      outputPath,
+    ]);
+  } finally {
+    await fs.unlink(palettePath).catch(() => undefined);
+  }
+  return outputPath;
+}
+
 export async function getVideoDuration(filePath: string): Promise<number> {
   const metadata = await getVideoMetadata(filePath);
   return metadata.duration;

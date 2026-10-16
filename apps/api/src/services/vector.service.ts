@@ -257,8 +257,44 @@ class VectorService {
     }));
   }
 
-  async deletePoints(collection: string, ids: string[]): Promise<boolean> {
+  /** Fetch stored chunks for a file (exports, transcripts). */
+  async scrollPoints(
+    collection: string,
+    fileId: string,
+    limit = 500
+  ): Promise<Array<{ text: string; chunkIndex: number; metadata: Record<string, unknown> }>> {
     try {
+      const response = await this.fetchWithRetry(`${this.baseUrl}/collections/${collection}/points/scroll`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          limit,
+          with_payload: true,
+          filter: { must: [{ key: 'file_id', match: { value: fileId } }] },
+        }),
+      });
+      if (!response.ok) return [];
+      const data = await response.json() as any;
+      const points: Array<{ payload?: Record<string, unknown> }> = data.result?.points || [];
+      return points
+        .map((p) => {
+          const payload = p.payload ?? {};
+          const meta = (payload.metadata as Record<string, unknown>) ?? {};
+          return {
+            text: String(payload.text ?? ''),
+            chunkIndex: Number(payload.chunk_index ?? 0),
+            metadata: meta,
+          };
+        })
+        .filter((p) => p.text)
+        .sort((a, b) => a.chunkIndex - b.chunkIndex);
+    } catch (error) {
+      logger.error({ err: error instanceof Error ? error.message : String(error), collection }, 'Failed to scroll points');
+      return [];
+    }
+  }
+
+  async deletePoints(collection: string, ids: string[]): Promise<boolean> {    try {
       const response = await fetch(`${this.baseUrl}/collections/${collection}/points/delete`, {
         method: 'POST',
         headers: this.getHeaders(),

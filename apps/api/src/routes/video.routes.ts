@@ -179,10 +179,46 @@ router.get(
 );
 
 router.post(
-  '/smart-clips',
+  '/translate',
   authenticate,
   requireSubscription,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { fileId, targetLang } = req.body;
+      const userId = req.user!.userId;
+
+      if (!fileId || !targetLang) {
+        return res.status(400).json({ error: 'fileId and targetLang are required' });
+      }
+      if (!(await requireOwnedFile(fileId, userId))) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+
+      const response = await fetch(`${config.aiServiceUrl}/api/v1/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_id: fileId,
+          user_id: userId,
+          target_lang: String(targetLang).slice(0, 40),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI service error: ${response.statusText}`);
+      }
+      res.json(await response.json());
+    } catch (error) {
+      logger.error({ error }, 'Error translating transcript');
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/smart-clips',
+  authenticate,
+  requireSubscription,  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { fileId, maxClips = 5, refresh } = req.body;
       const userId = req.user!.userId;

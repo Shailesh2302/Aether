@@ -50,7 +50,7 @@ export default function SharedPage() {
                 <Link2Off className="mx-auto h-10 w-10 text-muted-foreground/50" />
                 <h1 className="mt-3 text-lg font-semibold">Link unavailable</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {error ?? "This shared link doesn't exist."}
+                  {error ?? "This shared link does not exist."}
                 </p>
               </CardContent>
             </Card>
@@ -98,7 +98,7 @@ export default function SharedPage() {
                   <CardContent className="py-12 text-center">
                     <FileText className="mx-auto h-10 w-10 text-muted-foreground/50" />
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Preview isn't available for this file type — download it to view.
+                      Preview is not available for this file type — download it to view.
                     </p>
                   </CardContent>
                 </Card>

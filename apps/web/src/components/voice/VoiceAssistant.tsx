@@ -188,7 +188,6 @@ export function VoiceAssistant() {
     },
     [router]
   );
-
   const startListening = useCallback(() => {
     const SR = recognitionCtor();
     if (!SR) {
@@ -212,16 +211,11 @@ export function VoiceAssistant() {
     wantRef.current = true;
     setPhase("listening");
     setDebug("starting…");
-    spawnCycle(SR);
+    spawnCycleRef.current(SR);
   }, []);
 
-  /**
-   * Start one recognition cycle with a FRESH instance. Chrome recycles
-   * recognizers aggressively; reusing one across onend restarts is what
-   * made listening die after 1-2s. Each cycle ends -> brief pause ->
-   * next fresh cycle, until the user stops us or a final result lands.
-   */
-  function spawnCycle(SR: NonNullable<ReturnType<typeof recognitionCtor>>) {
+  const spawnCycleRef = useRef((_SR: NonNullable<ReturnType<typeof recognitionCtor>>) => {});
+  spawnCycleRef.current = (SR: NonNullable<ReturnType<typeof recognitionCtor>>) => {
     if (!wantRef.current) return;
     const cycle = ++cycleRef.current;
     const recog = new SR();
@@ -311,7 +305,7 @@ export function VoiceAssistant() {
       if (restartTimer.current) clearTimeout(restartTimer.current);
       restartTimer.current = setTimeout(() => {
         if (!wantRef.current) return;
-        spawnCycle(SR);
+        spawnCycleRef.current(SR);
       }, 150);
     };
     try {
@@ -322,10 +316,10 @@ export function VoiceAssistant() {
       if (restartTimer.current) clearTimeout(restartTimer.current);
       restartTimer.current = setTimeout(() => {
         if (!wantRef.current) return;
-        spawnCycle(SR);
+        spawnCycleRef.current(SR);
       }, 400);
     }
-  }
+  };
 
   useEffect(() => {
     return () => {

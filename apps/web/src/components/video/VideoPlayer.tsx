@@ -141,7 +141,7 @@ export function VideoPlayer({
       video.removeEventListener("playing", handlePlaying);
       video.removeEventListener("volumechange", handleVolume);
     };
-  }, [initialTime, onReady, onTimeUpdate, seekTo]);
+  }, [initialTime, onReady, onTimeUpdate, seekTo, stopAt]);
 
   const togglePlay = () => {
     const video = videoRef.current;

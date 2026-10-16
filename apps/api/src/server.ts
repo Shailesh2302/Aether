@@ -26,6 +26,19 @@ import internalRoutes from './routes/internal.routes.js';
 
 dotenv.config();
 
+// Node's fetch() never times out on its own. Free-tier upstreams that fall
+// asleep accept TCP and then go silent, which would hang requests forever
+// (and starve the single free-tier worker behind them). Default every
+// outbound call to 60s; call sites with long legitimate runtimes
+// (transcription, indexing) pass their own signal via fetchWithTimeout.
+const nativeFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = ((url: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1] = {}) => {
+  if (!init?.signal) {
+    return nativeFetch(url, { ...init, signal: AbortSignal.timeout(60_000) });
+  }
+  return nativeFetch(url, init);
+}) as typeof fetch;
+
 const app = express();
 
 app.use(helmet());

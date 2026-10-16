@@ -5,6 +5,20 @@ import { config } from '../config/env.js';
 
 const randomBytes = promisify(crypto.randomBytes);
 
+/**
+ * fetch() with a hard timeout. Node's fetch never times out on its own;
+ * against sleeping free-tier upstreams that accept TCP and go silent,
+ * an unbounded fetch hangs the request forever (and on single-worker
+ * free instances, starves everything behind it).
+ */
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 90_000
+): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+}
+
 export function generateToken(length = 32): string {
   return crypto.randomBytes(length).toString('hex');
 }

@@ -8,6 +8,7 @@ import { storageService } from '../services/storage.service.js';
 import { queueService } from '../services/queue.service.js';
 import { processVideoFile, processDocumentFile } from '../services/processing.service.js';
 import { getVideoMetadata } from '../utils/ffmpeg.js';
+import { fetchWithTimeout } from '../utils/helpers.js';
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 
@@ -192,7 +193,7 @@ async function indexDocumentInBackground(
   userId: string
 ): Promise<void> {
   try {
-    const aiResponse = await fetch(`${config.aiServiceUrl}/api/v1/documents/index`, {
+    const aiResponse = await fetchWithTimeout(`${config.aiServiceUrl}/api/v1/documents/index`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -201,7 +202,7 @@ async function indexDocumentInBackground(
         mime_type: mimeType,
         user_id: userId,
       }),
-    });
+    }, 600_000);
     if (aiResponse.ok) {
       logger.info({ fileId }, 'Background indexing finished');
       await prisma.file.update({ where: { id: fileId }, data: { status: 'COMPLETED' } });

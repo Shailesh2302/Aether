@@ -115,7 +115,10 @@ class VectorService {
 
   // Free-tier Qdrant sleeps after idle and answers 502 while waking
   // (30-60s). Ride out the wake window instead of failing the request.
+  // Every attempt carries its own timeout: suspending hosts accept TCP and
+  // then go silent, which would otherwise hang fetch() forever.
   private static readonly WAKE_DELAYS_MS = [1000, 2000, 4000, 8000, 15000, 30000];
+  private static readonly ATTEMPT_TIMEOUT_MS = 20000;
 
   private async fetchWithRetry(url: string, init: RequestInit, attempts = 2): Promise<Response> {
     let lastError: unknown;
@@ -123,7 +126,10 @@ class VectorService {
     const rounds = Math.max(attempts, delays.length + 1);
     for (let i = 0; i < rounds; i++) {
       try {
-        const res = await fetch(url, init);
+        const res = await fetch(url, {
+          ...init,
+          signal: AbortSignal.timeout(VectorService.ATTEMPT_TIMEOUT_MS),
+        });
         // Retry on proxy wake-up errors (Render free tier)
         if (res.status === 502 || res.status === 503 || res.status === 504) {
           if (i < rounds - 1) {

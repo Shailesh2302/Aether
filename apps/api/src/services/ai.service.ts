@@ -1,5 +1,6 @@
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
+import { fetchWithTimeout } from '../utils/helpers.js';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -85,11 +86,11 @@ class AIService {
 
   async chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: this.buildHeaders(),
         body: JSON.stringify(this.buildBody(request, false)),
-      });
+      }, 120_000);
 
       if (!response.ok) {
         const error = await response.text();
@@ -165,14 +166,14 @@ class AIService {
     try {
       const textInput = Array.isArray(input) ? input : [input];
       
-      const response = await fetch(`${this.baseUrl}/embeddings`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}/embeddings`, {
         method: 'POST',
         headers: this.buildHeaders(),
         body: JSON.stringify({
           input: textInput,
           model: this.embeddingModel,
         }),
-      });
+      }, 60_000);
 
       if (!response.ok) {
         const error = await response.text();

@@ -7,7 +7,11 @@ import { prisma } from '../config/db.js';
 import { trimVideo, generateThumbnail, extractAudio } from '../utils/ffmpeg.js';
 import { aiService } from './ai.service.js';
 import { vectorService } from './vector.service.js';
+import { fetchWithTimeout } from '../utils/helpers.js';
 import { randomUUID } from 'crypto';
+
+// Background processing (not user-facing): allow slow cold starts.
+const BG_TIMEOUT_MS = 600_000;
 
 /**
  * Core media/document processing used by BOTH the queue worker and the
@@ -32,7 +36,7 @@ async function indexViaAI(args: {
   // Preferred path: AI service reads the file directly (shared filesystem,
   // e.g. local dev + queue worker on the same host).
   try {
-    const indexResp = await fetch(`${config.aiServiceUrl}/api/v1/documents/index`, {
+    const indexResp = await fetchWithTimeout(`${config.aiServiceUrl}/api/v1/documents/index`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -41,7 +45,7 @@ async function indexViaAI(args: {
         user_id: args.userId || 'unknown',
         mime_type: args.mimeType,
       }),
-    });
+    }, BG_TIMEOUT_MS);
     if (indexResp.ok) return;
     logger.warn({ status: indexResp.status, fileId: args.fileId }, 'Path-based indexing refused, falling back to upload');
   } catch (err) {
@@ -84,10 +88,10 @@ async function indexViaUpload(args: {
       const audioBuf = await fs.promises.readFile(tmpAudio);
       const form = new FormData();
       form.append('file', new Blob([new Uint8Array(audioBuf)], { type: 'audio/mpeg' }), 'audio.mp3');
-      const tResp = await fetch(`${config.aiServiceUrl}/api/v1/transcription`, {
+      const tResp = await fetchWithTimeout(`${config.aiServiceUrl}/api/v1/transcription`, {
         method: 'POST',
         body: form,
-      });
+      }, BG_TIMEOUT_MS);
       if (!tResp.ok) throw new Error(`Transcription returned ${tResp.status}`);
       const tData = await tResp.json() as { text?: string };
       text = tData.text || '';
@@ -98,10 +102,10 @@ async function indexViaUpload(args: {
     const buf = await fs.promises.readFile(path.resolve(args.inputPath));
     const form = new FormData();
     form.append('file', new Blob([new Uint8Array(buf)], { type: args.mimeType }), path.basename(args.inputPath));
-    const eResp = await fetch(`${config.aiServiceUrl}/api/v1/documents/extract`, {
+    const eResp = await fetchWithTimeout(`${config.aiServiceUrl}/api/v1/documents/extract`, {
       method: 'POST',
       body: form,
-    });
+    }, BG_TIMEOUT_MS);
     if (!eResp.ok) throw new Error(`Extraction returned ${eResp.status}`);
     const eData = await eResp.json() as { text?: string };
     text = eData.text || '';

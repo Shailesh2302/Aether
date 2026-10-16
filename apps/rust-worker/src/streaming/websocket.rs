@@ -29,7 +29,7 @@ impl WebSocketManager {
     }
 
     pub async fn broadcast(&self, message: &str) {
-        for (_, sender) in &self.clients {
+        for sender in self.clients.values() {
             let _ = sender.send(message.to_string()).await;
         }
     }

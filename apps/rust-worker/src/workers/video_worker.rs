@@ -250,7 +250,7 @@ impl VideoWorker {
             subtitle_transcript = Some(subs);
         }
 
-        let transcription = if let Some(subs) = &subtitle_transcript {
+        let mut transcription = if let Some(subs) = &subtitle_transcript {
             info!("Skipping Whisper - subtitles provide the transcript");
             subs.clone()
         } else {
@@ -259,32 +259,32 @@ impl VideoWorker {
         };
 
         if subtitle_transcript.is_none() {
-        info!("Extracting audio from video...");
-        // Videos without an audio track cannot be transcribed - finish gracefully.
-        if let Err(e) = ffmpeg.extract_audio(&video_path, &audio_path).await {
-            warn!("Audio extraction failed (video may have no audio track): {}", e);
-            info!("Skipping transcription - completing job without transcript");
+            info!("Extracting audio from video...");
+            // Videos without an audio track cannot be transcribed - finish gracefully.
+            if let Err(e) = ffmpeg.extract_audio(&video_path, &audio_path).await {
+                warn!("Audio extraction failed (video may have no audio track): {}", e);
+                info!("Skipping transcription - completing job without transcript");
 
-            let thumb_dir = format!(
-                "{}/thumbnails",
-                std::env::var("API_STORAGE_PATH")
-                    .unwrap_or_else(|_| "../api/storage".to_string())
-                    .trim_end_matches('/')
-            );
-            fs::create_dir_all(&thumb_dir).await?;
-            let thumbnail_path = format!("{}/{}.jpg", thumb_dir, file_id);
-            if let Err(e) = ffmpeg.generate_thumbnail(&video_path, &thumbnail_path, 0.0).await {
-                warn!("Thumbnail generation failed (non-fatal): {}", e);
+                let thumb_dir = format!(
+                    "{}/thumbnails",
+                    std::env::var("API_STORAGE_PATH")
+                        .unwrap_or_else(|_| "../api/storage".to_string())
+                        .trim_end_matches('/')
+                );
+                fs::create_dir_all(&thumb_dir).await?;
+                let thumbnail_path = format!("{}/{}.jpg", thumb_dir, file_id);
+                if let Err(e) = ffmpeg.generate_thumbnail(&video_path, &thumbnail_path, 0.0).await {
+                    warn!("Thumbnail generation failed (non-fatal): {}", e);
+                }
+
+                let http = self.app_state_http();
+                self.update_file_status(&http, &file_id, "COMPLETED").await?;
+                info!("Video job {} completed (no audio track)", job.id);
+                return Ok(());
             }
 
-            let http = self.app_state_http();
-            self.update_file_status(&http, &file_id, "COMPLETED").await?;
-            info!("Video job {} completed (no audio track)", job.id);
-            return Ok(());
-        }
-
-        info!("Sending audio for transcription...");
-        let transcription = self.send_to_transcription(&audio_path).await?;
+            info!("Sending audio for transcription...");
+            transcription = self.send_to_transcription(&audio_path).await?;
         }
 
         let metadata = serde_json::json!({

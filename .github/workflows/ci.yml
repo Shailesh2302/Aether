@@ -47,15 +47,15 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Typecheck
-        working-directory: apps/api
-        run: bun run typecheck
-
       - name: Validate Prisma schema + generate client
         working-directory: apps/api
         run: |
           bun x prisma validate
           bun x prisma generate
+
+      - name: Typecheck
+        working-directory: apps/api
+        run: bun run typecheck
 
   ai-service:
     name: AI service import check

@@ -27,6 +27,8 @@ interface VideoPlayerProps {
   poster?: string;
   onTimeUpdate?: (time: number) => void;
   initialTime?: number;
+  /** When set, playback pauses automatically at this time (clip preview). */
+  stopAt?: number;
   className?: string;
   onReady?: (handle: VideoPlayerHandle) => void;
   autoPlay?: boolean;
@@ -37,6 +39,7 @@ export function VideoPlayer({
   poster,
   onTimeUpdate,
   initialTime = 0,
+  stopAt,
   className,
   onReady,
   autoPlay = false,
@@ -84,6 +87,15 @@ export function VideoPlayer({
     };
 
     const handleTime = () => {
+      // Clip-bounded playback: stop at the segment end instead of
+      // rolling into the rest of the video.
+      if (stopAt !== undefined && video.currentTime >= stopAt) {
+        video.pause();
+        video.currentTime = stopAt;
+        setCurrentTime(stopAt);
+        onTimeUpdate?.(stopAt);
+        return;
+      }
       setCurrentTime(video.currentTime);
       onTimeUpdate?.(video.currentTime);
     };
@@ -237,9 +249,9 @@ export function VideoPlayer({
         <input
           type="range"
           min={0}
-          max={duration || 0}
+          max={stopAt ?? duration ?? 0}
           step={0.1}
-          value={currentTime}
+          value={Math.min(currentTime, stopAt ?? currentTime)}
           onChange={handleSeek}
           className="h-1 w-full cursor-pointer appearance-none rounded-full bg-white/30 accent-white"
           aria-label="Seek"

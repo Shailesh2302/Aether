@@ -167,6 +167,11 @@ export default function ClipsPage() {
     return fileList.find((f) => f.id === playingClip.fileId) ?? null;
   }, [playingClip, fileList]);
 
+  const highlightVideo = useMemo(
+    () => videos.find((v) => v.id === highlightVideoId) ?? null,
+    [videos, highlightVideoId]
+  );
+
   const previewFile = useMemo(() => {
     if (!preview) return null;
     return fileList.find((f) => f.id === preview.fileId) ?? null;
@@ -335,6 +340,14 @@ export default function ClipsPage() {
                           </Badge>
                         )}
                       </div>
+                      {highlightVideo && (
+                        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <VideoIcon className="h-3 w-3 shrink-0" />
+                          <span className="truncate">
+                            From: {highlightVideo.originalName}
+                          </span>
+                        </p>
+                      )}
                       {h.description && (
                         <p className="line-clamp-2 text-xs text-muted-foreground">
                           {h.description}
@@ -489,12 +502,17 @@ export default function ClipsPage() {
                 <DialogTitle className="truncate">
                   {playingClip.title}
                 </DialogTitle>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {formatDuration(playingClip.startTime)} – {formatDuration(playingClip.endTime)}
+                  {playingFile ? ` · From: ${playingFile.originalName}` : ""}
+                </p>
               </DialogHeader>
               <div className="px-6 pb-6">
                 {playingFile?.url ? (
                   <VideoPlayer
                     src={playingFile.url}
                     initialTime={playingClip.startTime}
+                    stopAt={playingClip.endTime}
                     className="w-full"
                   />
                 ) : (
@@ -523,10 +541,20 @@ export default function ClipsPage() {
                 <DialogTitle className="truncate">{preview.clip.title}</DialogTitle>
               </DialogHeader>
               <div className="px-6 pb-6 space-y-3">
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <VideoIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    From: {previewFile?.originalName ?? "source video"}
+                  </span>
+                  <span className="font-mono">
+                    {formatDuration(preview.clip.start_sec)} – {formatDuration(preview.clip.end_sec)}
+                  </span>
+                </p>
                 {previewFile?.url ? (
                   <VideoPlayer
                     src={previewFile.url}
                     initialTime={preview.clip.start_sec}
+                    stopAt={preview.clip.end_sec}
                     className="w-full"
                   />
                 ) : (

@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:2401/api";
 // Bare origin for proxying storage/api paths (no /api suffix).
-const API_ORIGIN = process.env.API_ORIGIN || "http://localhost:3001";
+const API_ORIGIN = process.env.API_ORIGIN || "http://localhost:2401";
 
 const nextConfig = {
   reactStrictMode: true,

@@ -82,7 +82,7 @@ export function AskAboutVideo({
     setStreamingContent("");
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/video-features/ask`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2401/api'}/video-features/ask`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

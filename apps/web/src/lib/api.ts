@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance, type AxiosProgressEvent } from "axios";
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:2401/api";
 
 const TOKEN_KEY = "aether-token";
 

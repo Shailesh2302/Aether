@@ -20,7 +20,7 @@ RUN pnpm build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV PORT=3001
+ENV PORT=2401
 
 # Prisma's query engine needs OpenSSL to make TLS connections to managed
 # Postgres (Neon, RDS, Supabase, etc.). node:20-alpine does not include it,
@@ -39,7 +39,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 
 WORKDIR /app/apps/api
-EXPOSE 3001
+EXPOSE 2401
 
 # Start command handles Prisma's P3005 ("schema is not empty") error so
 # the first deploy against a DB that already has the schema (e.g. from a

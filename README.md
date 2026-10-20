@@ -43,10 +43,10 @@ cd infrastructure/scripts
 ```
 
 4. Access the application:
-- Frontend: http://localhost
-- API: http://localhost/api
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3001
+- Frontend: http://localhost:2400
+- API: http://localhost:2401/api
+- Prometheus: http://localhost:2407
+- Grafana: http://localhost:2408
 
 ### Default Credentials
 
@@ -164,11 +164,11 @@ services:
   backend:
     image: aether/backend:latest
     ports:
-      - "8000:8000"
+      - "2401:2401"
   frontend:
     image: aether/frontend:latest
     ports:
-      - "3000:3000"
+      - "2400:2400"
   postgres:
     image: postgres:16-alpine
   redis:
@@ -181,7 +181,7 @@ services:
 
 ### Prometheus Metrics
 
-Access metrics at: `http://localhost:9090`
+Access metrics at: `http://localhost:2407`
 
 Key metrics:
 - `http_requests_total` - Request count
@@ -191,7 +191,7 @@ Key metrics:
 
 ### Grafana Dashboards
 
-Access dashboards at: `http://localhost:3001`
+Access dashboards at: `http://localhost:2408`
 
 - System Overview
 - Database Metrics

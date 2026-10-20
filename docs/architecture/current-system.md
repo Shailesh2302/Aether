@@ -21,13 +21,13 @@ Redis and Qdrant are local infrastructure services. PostgreSQL is an external de
 
 ```mermaid
 flowchart LR
-  U[User browser] --> W[Next.js web\nport 3000]
-  W -->|/api and /storage rewrite| A[Express API\nport 3001]
+  U[User browser] --> W[Next.js web\nport 2400]
+  W -->|/api and /storage rewrite| A[Express API\nport 2401]
 
   A --> P[(PostgreSQL)]
   A --> R[(Redis)]
   A --> Q[(Qdrant)]
-  A --> AI[FastAPI AI service\nport 3002]
+  A --> AI[FastAPI AI service\nport 2402]
 
   R -->|aether:video:queue| RW[Rust worker]
   R -->|aether:document:queue| NW[Node queue worker]
@@ -236,14 +236,14 @@ Clip creation persists a `Clip` row, then tries a Rust worker HTTP endpoint firs
 
 | Service | Published port | Dependencies / persistent data |
 | --- | --- | --- |
-| `web` | 3000 | Depends on API |
-| `api` | 3001 | PostgreSQL URL, Redis, Qdrant, AI service, storage volumes |
-| `ai-service` | 3002 | Qdrant, model-provider credentials, AI cache |
+| `web` | 2400 | Depends on API |
+| `api` | 2401 | PostgreSQL URL, Redis, Qdrant, AI service, storage volumes |
+| `ai-service` | 2402 | Qdrant, model-provider credentials, AI cache |
 | `rust-worker` | none | Redis, API, AI service, worker-local video volume |
 | `redis` | 6379 | Redis container |
 | `qdrant` | 6333 HTTP, 6334 gRPC | `qdrant_data` volume |
-| `prometheus` | 9090 | Prometheus configuration/data volume |
-| `grafana` | 3004 | Grafana provisioning/data volume |
+| `prometheus` | 2407 | Prometheus configuration/data volume |
+| `grafana` | 2408 | Grafana provisioning/data volume |
 
 The root `start` script runs API, web, AI service, and Rust worker for local development. The API Node queue worker is a separate script and is not included in that root start command or the Compose API command.
 

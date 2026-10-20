@@ -83,8 +83,8 @@ show_status() {
     echo "Services available at:"
     echo "  - Frontend: http://localhost"
     echo "  - API: http://localhost/api"
-    echo "  - Prometheus: http://localhost:9090"
-    echo "  - Grafana: http://localhost:3001"
+    echo "  - Prometheus: http://localhost:2407"
+    echo "  - Grafana: http://localhost:2408"
 }
 
 main() {

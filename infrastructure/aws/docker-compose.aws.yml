@@ -50,7 +50,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      PORT: 3001
+      PORT: 2401
       POSTGRES_URL: postgresql://aether:${POSTGRES_PASSWORD}@postgres:5432/aether
       POSTGRES_DIRECT_URL: postgresql://aether:${POSTGRES_PASSWORD}@postgres:5432/aether
       REDIS_URL: redis://redis:6379
@@ -60,7 +60,7 @@ services:
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       QDRANT_API_KEY: ""
-      AI_SERVICE_URL: http://ai-service:3002
+      AI_SERVICE_URL: http://ai-service:2402
       NVIDIA_API_KEY: ${NVIDIA_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: 7d
@@ -82,7 +82,7 @@ services:
     depends_on:
       - qdrant
     environment:
-      PORT: 3002
+      PORT: 2402
       NVIDIA_API_KEY: ${NVIDIA_API_KEY}
       NVIDIA_BASE_URL: https://openrouter.ai/api/v1
       NVIDIA_CHAT_MODEL: openai/gpt-4o-mini

@@ -25,12 +25,12 @@ impl Config {
             redis_port: env::var("REDIS_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(6379),
             queue_name: env::var("QUEUE_NAME").unwrap_or_else(|_| "aether:video:queue".to_string()),
             ws_host: env::var("WS_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
-            ws_port: env::var("WS_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(9000),
+            ws_port: env::var("WS_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(2410),
             storage_path: env::var("STORAGE_BASE_PATH")
                 .or_else(|_| env::var("STORAGE_PATH"))
                 .unwrap_or_else(|_| "./storage".to_string()),
-            api_url: env::var("API_URL").unwrap_or_else(|_| "http://localhost:3001".to_string()),
-            ai_service_url: env::var("AI_SERVICE_URL").unwrap_or_else(|_| "http://localhost:3002".to_string()),
+            api_url: env::var("API_URL").unwrap_or_else(|_| "http://localhost:2401".to_string()),
+            ai_service_url: env::var("AI_SERVICE_URL").unwrap_or_else(|_| "http://localhost:2402".to_string()),
             service_key: env::var("SERVICE_API_KEY").unwrap_or_default(),
         })
     }

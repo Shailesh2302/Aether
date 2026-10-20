@@ -3,8 +3,8 @@
 cd /home/shailesh/Desktop/aether/apps/rust-worker
 exec env \
   REDIS_URL=redis://localhost:6379 \
-  API_URL=http://localhost:3001 \
-  AI_SERVICE_URL=http://localhost:3002 \
+  API_URL=http://localhost:2401 \
+  AI_SERVICE_URL=http://localhost:2402 \
   SERVICE_API_KEY=aether-internal-dev-key \
   STORAGE_BASE_PATH=./storage \
   API_STORAGE_PATH=../api/storage \

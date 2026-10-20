@@ -34,6 +34,6 @@ ENV RUST_LOG=info
 ENV REDIS_URL=redis://localhost:6379
 ENV STORAGE_PATH=/tmp/aether
 
-EXPOSE 9000
+EXPOSE 2410
 
 CMD ["aether-rust-worker"]

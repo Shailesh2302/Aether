@@ -22,14 +22,14 @@ COPY --from=deps /install /usr/local
 COPY apps/ai-service/app ./app
 
 ENV HOST=0.0.0.0 \
-    PORT=3002 \
+    PORT=2402 \
     WHISPER_DEVICE=cpu \
     WHISPER_MODEL=base
 
-EXPOSE 3002
+EXPOSE 2402
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -fs http://localhost:${PORT:-3002}/api/v1/health || exit 1
+    CMD curl -fs http://localhost:${PORT:-2402}/api/v1/health || exit 1
 
-# Listen on $PORT when set (Render routes to it), else 3002 locally.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-3002}"]
+# Listen on $PORT when set (Render routes to it), else 2402 locally.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-2402}"]

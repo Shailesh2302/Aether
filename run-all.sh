@@ -22,7 +22,7 @@ start_services() {
     # Start Web (Next.js)
     echo -e "${GREEN}[1/4]${NC} Starting Web (Next.js)..."
     cd "$ROOT/apps/web"
-    bun run dev > /tmp/aether-web.log 2>&1 &
+    PORT=2400 bun run dev > /tmp/aether-web.log 2>&1 &
     WEB_PID=$!
     echo "Web PID: $WEB_PID"
 
@@ -37,7 +37,7 @@ start_services() {
     echo -e "${GREEN}[3/4]${NC} Starting AI Service (Python)..."
     cd "$ROOT/apps/ai-service"
     if [ -x "./venv/bin/python" ]; then PY=./venv/bin/python; else PY=python; fi
-    $PY -m uvicorn app.main:app --host 0.0.0.0 --port 3002 --reload > /tmp/aether-ai.log 2>&1 &
+    $PY -m uvicorn app.main:app --host 0.0.0.0 --port 2402 --reload > /tmp/aether-ai.log 2>&1 &
     AI_PID=$!
     echo "AI PID: $AI_PID"
 
@@ -53,9 +53,9 @@ start_services() {
     echo -e "${GREEN}✅ All services started!${NC}"
     echo ""
     echo "Access URLs:"
-    echo -e "  🌐 Web:     ${YELLOW}http://localhost:3000${NC}"
-    echo -e "  📡 API:     ${YELLOW}http://localhost:3001${NC}"
-    echo -e "  🤖 AI:      ${YELLOW}http://localhost:3002${NC}"
+    echo -e "  🌐 Web:     ${YELLOW}http://localhost:2400${NC}"
+    echo -e "  📡 API:     ${YELLOW}http://localhost:2401${NC}"
+    echo -e "  🤖 AI:      ${YELLOW}http://localhost:2402${NC}"
     echo -e "  📚 Qdrant:  ${YELLOW}http://localhost:6333${NC}"
     echo ""
     echo "Logs:"

@@ -5,9 +5,9 @@
 # Files: Video + PDF (DeepLearningCrashCourse_Chapter3.pdf)
 # ============================================================
 
-BASE_URL="http://localhost:3001"
-AI_URL="http://localhost:3002/api/v1"
-WEB_URL="http://localhost:3000"
+BASE_URL="http://localhost:2401"
+AI_URL="http://localhost:2402/api/v1"
+WEB_URL="http://localhost:2400"
 
 PASS=0
 FAIL=0

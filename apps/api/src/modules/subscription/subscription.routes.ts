@@ -58,7 +58,7 @@ router.post(
       if (!isPaymentsConfigured()) {
         return res.status(503).json({ error: 'Payments are not configured yet. Please contact support.' });
       }
-      const appUrl = process.env.APP_URL || 'http://localhost:3000';
+      const appUrl = process.env.APP_URL || 'http://localhost:2400';
       const result = await createCheckoutSession(
         req.user!.userId,
         req.user!.email,

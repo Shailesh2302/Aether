@@ -64,7 +64,7 @@ class AIService {
     return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${this.apiKey}`,
-      'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000',
+      'HTTP-Referer': process.env.APP_URL || 'http://localhost:2400',
       'X-Title': 'Aether',
     };
   }

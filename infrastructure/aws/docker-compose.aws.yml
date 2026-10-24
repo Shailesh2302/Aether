@@ -92,6 +92,10 @@ services:
       QDRANT_API_KEY: ""
       WHISPER_MODEL: tiny
       WHISPER_DEVICE: cpu
+      # YouTube blocks datacenter IPs with a bot check. Supply a Netscape
+      # cookies.txt (file path or base64 contents) to enable YouTube imports.
+      YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-}
+      YTDLP_COOKIES_B64: ${YTDLP_COOKIES_B64:-}
     networks:
       - aether-net
 

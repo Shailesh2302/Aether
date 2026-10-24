@@ -142,6 +142,26 @@ After `aether-ai` deploys, copy its URL (e.g. `https://aether-ai-abc.onrender.co
    - `AI_SERVICE_URL` = the AI service URL
 2. Auto-redeploy.
 
+## Enable YouTube imports (cookies)
+
+YouTube blocks downloads from cloud/datacenter IPs with a "Sign in to confirm
+you're not a bot" check. Direct media URLs (MP4/PDF/etc.) import without any
+setup; YouTube/Vimeo links need a cookies export.
+
+1. In a private/incognito window, sign in to YouTube (a throwaway account is
+   safest — yt-dlp documents a small risk of account bans).
+2. Export cookies for `youtube.com` as a Netscape `cookies.txt` file using a
+   browser extension such as "Get cookies.txt LOCALLY".
+3. Provide them to the AI service in one of two ways:
+   - `YTDLP_COOKIES_FILE=/path/to/cookies.txt` — mount the file read-only into
+     the `ai-service` container, or
+   - `YTDLP_COOKIES_B64=$(base64 -w0 cookies.txt)` — set it in the deploy
+     `.env` (recommended on EC2; no bind mount needed).
+4. Restart the AI service: `docker compose -f docker-compose.aws.yml up -d ai-service`.
+
+If YouTube changes its bot rules the error surfaced by the import UI will say
+so; refresh the cookies and restart. Never commit the cookies file.
+
 ## Test the deployment
 
 ```bash

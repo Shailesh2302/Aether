@@ -433,14 +433,26 @@ router.post(
 async function importInBackground(fileId: string, url: string, userId: string): Promise<void> {
   const fail = async (reason: string) => {
     logger.warn({ fileId, reason }, 'Import failed');
-    await prisma.file.update({ where: { id: fileId }, data: { status: 'FAILED' } }).catch(() => undefined);
+    // Keep the reason on the row so the UI can tell the user why the
+    // import failed instead of leaving a bare FAILED status.
+    await prisma.file.update({
+      where: { id: fileId },
+      data: { status: 'FAILED', metadata: { importError: reason } },
+    }).catch(() => undefined);
   };
 
   try {
     // Stream remote bytes to a temp file (never whole file in memory).
     const dlResp = await fetch(`${config.aiServiceUrl}/api/v1/import/download?url=${encodeURIComponent(url)}`);
     if (!dlResp.ok || !dlResp.body) {
-      return fail(`download service returned ${dlResp.status}`);
+      let reason = `download service returned ${dlResp.status}`;
+      try {
+        const payload = await dlResp.json() as { detail?: unknown };
+        if (typeof payload.detail === 'string' && payload.detail.trim()) {
+          reason = payload.detail;
+        }
+      } catch { /* non-JSON error body */ }
+      return fail(reason);
     }
     const disposition = dlResp.headers.get('content-disposition') || '';
     const titleHeader = dlResp.headers.get('x-import-title') || '';

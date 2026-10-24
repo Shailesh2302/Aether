@@ -76,6 +76,31 @@ export default function UploadPage() {
       const file = await filesApi.importUrl(url);
       toast({ title: "Import started", description: file.originalName });
       setImportUrl("");
+      // Downloads run in the background. Poll briefly so a blocked or
+      // unreachable URL surfaces the real reason instead of quietly
+      // sitting as FAILED in the library later.
+      void (async () => {
+        const deadline = Date.now() + 90_000;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+          try {
+            const current = await filesApi.get(file.id);
+            if (current.status === "FAILED") {
+              const reason = typeof current.metadata?.importError === "string"
+                ? current.metadata.importError
+                : "The download could not be completed.";
+              toast({ title: "Import failed", description: reason, variant: "destructive" });
+              return;
+            }
+            if (current.status === "PROCESSING" || current.status === "COMPLETED") {
+              toast({ title: "Download complete", description: `Processing ${current.originalName}` });
+              return;
+            }
+          } catch {
+            // Keep polling; transient network errors are not fatal.
+          }
+        }
+      })();
     } catch (error) {
       toast({
         title: "Import failed",

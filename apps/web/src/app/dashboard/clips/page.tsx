@@ -536,16 +536,29 @@ export default function ClipsPage() {
                   {playingClip.title}
                 </DialogTitle>
                 <p className="font-mono text-xs text-muted-foreground">
-                  {formatDuration(playingClip.startTime)} – {formatDuration(playingClip.endTime)}
-                  {playingFile ? ` · From: ${playingFile.originalName}` : ""}
+                  {formatDuration(playingClip.endTime - playingClip.startTime)}
+                  {playingClip.status !== "COMPLETED" ? " · processing" : ""}
+                  {playingFile
+                    ? ` · Source: ${formatDuration(playingClip.startTime)} – ${formatDuration(playingClip.endTime)} in ${playingFile.originalName}`
+                    : ""}
                 </p>
               </DialogHeader>
               <div className="px-6 pb-6">
-                {playingFile?.url ? (
+                {playingClip.status === "COMPLETED" && playingClip.videoUrl ? (
+                  // Play the rendered clip file so the timeline runs
+                  // 0:00 -> clip length rather than source timestamps.
+                  <VideoPlayer
+                    src={playingClip.videoUrl}
+                    poster={playingClip.thumbnail ?? undefined}
+                    className="w-full"
+                  />
+                ) : playingFile?.url ? (
+                  // Still cutting: preview the segment from the source.
                   <VideoPlayer
                     src={playingFile.url}
                     initialTime={playingClip.startTime}
                     stopAt={playingClip.endTime}
+                    clipStart={playingClip.startTime}
                     className="w-full"
                   />
                 ) : (
@@ -588,6 +601,7 @@ export default function ClipsPage() {
                     src={previewFile.url}
                     initialTime={preview.clip.start_sec}
                     stopAt={preview.clip.end_sec}
+                    clipStart={preview.clip.start_sec}
                     className="w-full"
                   />
                 ) : (

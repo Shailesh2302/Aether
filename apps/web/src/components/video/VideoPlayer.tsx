@@ -35,6 +35,12 @@ interface VideoPlayerProps {
   initialTime?: number;
   /** When set, playback pauses automatically at this time (clip preview). */
   stopAt?: number;
+  /**
+   * Start of a clip segment within the source video. When set, the
+   * player displays clip-relative time (0:00 -> clip length) instead of
+   * absolute source timestamps.
+   */
+  clipStart?: number;
   subtitles?: SubtitleTrack[];
   className?: string;
   onReady?: (handle: VideoPlayerHandle) => void;
@@ -47,6 +53,7 @@ export function VideoPlayer({
   onTimeUpdate,
   initialTime = 0,
   stopAt,
+  clipStart = 0,
   subtitles,
   className,
   onReady,
@@ -67,11 +74,14 @@ export function VideoPlayer({
     (time: number) => {
       const video = videoRef.current;
       if (!video) return;
-      const t = Math.max(0, Math.min(time, video.duration || time));
+      // Keep bounded clip previews inside [clipStart, stopAt].
+      const min = clipStart;
+      const max = stopAt ?? video.duration ?? time;
+      const t = Math.max(min, Math.min(time, max));
       video.currentTime = t;
       setCurrentTime(t);
     },
-    []
+    [clipStart, stopAt]
   );
 
   useEffect(() => {
@@ -82,8 +92,10 @@ export function VideoPlayer({
       setDuration(video.duration || 0);
       setIsLoading(false);
       setLoadError(false);
-      if (initialTime > 0) {
-        video.currentTime = initialTime;
+      const startAt = Math.max(initialTime, clipStart);
+      if (startAt > 0) {
+        video.currentTime = startAt;
+        setCurrentTime(startAt);
       }
       onReady?.({
         currentTime: video.currentTime,
@@ -141,13 +153,20 @@ export function VideoPlayer({
       video.removeEventListener("playing", handlePlaying);
       video.removeEventListener("volumechange", handleVolume);
     };
-  }, [initialTime, onReady, onTimeUpdate, seekTo, stopAt]);
+  }, [initialTime, onReady, onTimeUpdate, seekTo, stopAt, clipStart]);
 
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) video.play();
-    else video.pause();
+    if (video.paused) {
+      // Replay a bounded clip from its start once it reached the end.
+      if (stopAt !== undefined && video.currentTime >= stopAt - 0.05) {
+        seekTo(clipStart);
+      }
+      video.play();
+    } else {
+      video.pause();
+    }
   };
 
   const skip = (delta: number) => {
@@ -198,6 +217,12 @@ export function VideoPlayer({
       if (isPlaying) setShowControls(false);
     }, 2500);
   };
+
+  // Bounded previews show time relative to the clip, not the source video.
+  const displayTime = Math.max(0, currentTime - clipStart);
+  const displayDuration = stopAt !== undefined
+    ? Math.max(0, stopAt - clipStart)
+    : Math.max(0, (duration || clipStart) - clipStart);
 
   return (
     <div
@@ -261,10 +286,10 @@ export function VideoPlayer({
       >
         <input
           type="range"
-          min={0}
-          max={stopAt ?? duration ?? 0}
+          min={clipStart}
+          max={stopAt ?? (duration || clipStart)}
           step={0.1}
-          value={Math.min(currentTime, stopAt ?? currentTime)}
+          value={Math.min(Math.max(currentTime, clipStart), stopAt ?? currentTime)}
           onChange={handleSeek}
           className="h-1 w-full cursor-pointer appearance-none rounded-full bg-white/30 accent-white"
           aria-label="Seek"
@@ -318,7 +343,7 @@ export function VideoPlayer({
               aria-label="Volume"
             />
             <span className="ml-1 font-mono tabular-nums">
-              {formatDuration(currentTime)} / {formatDuration(duration)}
+              {formatDuration(displayTime)} / {formatDuration(displayDuration)}
             </span>
           </div>
           <button

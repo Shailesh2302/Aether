@@ -13,6 +13,17 @@ const requireOwnedFile = async (fileId: unknown, userId: string): Promise<boolea
   return Boolean(file);
 };
 
+/** Persist small counters so the status page can show generated artefacts. */
+const mergeFileMetadata = async (fileId: string, patch: Record<string, unknown>): Promise<void> => {
+  const file = await prisma.file.findUnique({ where: { id: fileId }, select: { metadata: true } });
+  if (!file) return;
+  const current = (file.metadata as Record<string, unknown> | null) ?? {};
+  await prisma.file.update({
+    where: { id: fileId },
+    data: { metadata: { ...current, ...patch } as Record<string, string | number | boolean | object> },
+  }).catch(() => undefined);
+};
+
 router.post(
   '/moments',
   authenticate,
@@ -47,6 +58,7 @@ router.post(
         ...m,
         description: m.description ?? m.summary ?? '',
       }));
+      await mergeFileMetadata(fileId, { momentsDetected: moments.length });
       res.json({ ...data, moments });
     } catch (error) {
       logger.error({ error }, 'Error detecting moments');
@@ -89,6 +101,7 @@ router.post(
         description: h.description ?? h.summary ?? h.reason ?? '',
         title: h.title ?? (typeof h.summary === 'string' ? h.summary.slice(0, 60) : ''),
       }));
+      await mergeFileMetadata(fileId, { highlightsGenerated: highlights.length });
       res.json({ ...data, highlights });
     } catch (error) {
       logger.error({ error }, 'Error generating highlights');

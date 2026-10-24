@@ -88,6 +88,10 @@ async def index_document(
         if request.file_id:
             payload.setdefault("file_id", request.file_id)
 
+        # Allow indexing into a fresh collection without a separate setup step.
+        if not await vector_service.collection_exists(request.collection):
+            await vector_service.create_collection(request.collection, len(embedding))
+
         ok = await vector_service.insert(
             vectors=[embedding],
             collection_name=request.collection,

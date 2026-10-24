@@ -4,6 +4,7 @@ import { requireSubscription } from '../middleware/subscription.js';
 import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/db.js';
+import { vectorService } from '../services/vector.service.js';
 
 const router = Router();
 
@@ -156,21 +157,52 @@ router.get(
       const { fileId } = req.params;
       const userId = req.user!.userId;
 
-      if (!(await requireOwnedFile(fileId, userId))) {
+      const file = await prisma.file.findFirst({
+        where: { id: fileId, userId },
+        select: { id: true, status: true, metadata: true, mimeType: true },
+      });
+      if (!file) {
         return res.status(404).json({ error: 'File not found' });
       }
 
-      const response = await fetch(
-        `${config.aiServiceUrl}/api/v1/status?file_id=${fileId}&user_id=${userId}`,
-        { method: 'GET' }
-      );
-
-      if (!response.ok) {
-        throw new Error(`AI service error: ${response.statusText}`);
+      // "Indexed" means vectors exist; the DB status alone cannot tell us
+      // that (e.g. a silent video completes without a transcript).
+      let indexed = false;
+      try {
+        const collection = `user_${userId}`.replace(/-/g, '_');
+        const points = await vectorService.scrollPoints(collection, fileId, 1);
+        indexed = points.length > 0;
+      } catch (vectorError) {
+        logger.warn({ vectorError, fileId }, 'Could not read video status from vector store');
       }
 
-      const data = await response.json();
-      res.json(data);
+      const meta = (file.metadata as Record<string, unknown> | null) ?? {};
+      const smartClips = (meta.smartClips as { clips?: unknown[] } | undefined)?.clips;
+      const highlightsCount = Number(meta.highlightsGenerated)
+        || (Array.isArray(meta.highlights) ? (meta.highlights as unknown[]).length : 0)
+        || (Array.isArray(smartClips) ? smartClips.length : 0);
+      const momentsCount = Number(meta.momentsDetected)
+        || (Array.isArray(meta.moments) ? (meta.moments as unknown[]).length : 0);
+
+      // The web UI expects lowercase lifecycle states and a 0-100 progress.
+      const statusMap: Record<string, string> = {
+        PENDING: 'pending',
+        PROCESSING: 'processing',
+        COMPLETED: 'completed',
+        FAILED: 'failed',
+      };
+      const status = statusMap[file.status] ?? 'pending';
+      const progress = status === 'completed' ? 100 : status === 'processing' ? 50 : status === 'failed' ? 0 : 10;
+
+      res.json({
+        file_id: fileId,
+        status,
+        progress,
+        transcript_ready: indexed,
+        indexed,
+        moments_detected: Number.isFinite(momentsCount) ? momentsCount : 0,
+        highlights_generated: Number.isFinite(highlightsCount) ? highlightsCount : 0,
+      });
     } catch (error) {
       logger.error({ error }, 'Error getting video status');
       next(error);

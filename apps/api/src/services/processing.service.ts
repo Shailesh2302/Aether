@@ -83,6 +83,7 @@ function chunkText(text: string, maxLen = 900): string[] {
 async function indexViaUpload(args: IndexJob): Promise<void> {
   const isMedia = args.mimeType.startsWith('video/') || args.mimeType.startsWith('audio/');
   let text = '';
+  let mediaMetadata: Record<string, unknown> = {};
 
   if (isMedia) {
     const tmpAudio = path.join(os.tmpdir(), `aether-${randomUUID()}.mp3`);
@@ -96,8 +97,28 @@ async function indexViaUpload(args: IndexJob): Promise<void> {
         body: form,
       }, BG_TIMEOUT_MS);
       if (!tResp.ok) throw new Error(`Transcription returned ${tResp.status}`);
-      const tData = await tResp.json() as { text?: string };
+      const tData = await tResp.json() as {
+        text?: string;
+        language?: string;
+        duration?: number;
+        segments?: Array<{ start?: number; end?: number; text?: string; start_sec?: number; end_sec?: number }>;
+      };
       text = tData.text || '';
+      // Preserve real timestamps: subtitle export and "jump to moment"
+      // depend on timed segments. The AI service returns start/end here,
+      // while the Python pipeline stores start_sec/end_sec - normalize both.
+      const segments = (tData.segments || [])
+        .map((s) => ({
+          start_sec: Number(s.start_sec ?? s.start ?? 0),
+          end_sec: Number(s.end_sec ?? s.end ?? 0),
+          text: String(s.text ?? '').trim(),
+        }))
+        .filter((s) => s.text.length > 0);
+      mediaMetadata = {
+        transcript_language: tData.language || 'unknown',
+        transcript_duration: Number(tData.duration) || 0,
+        ...(segments.length > 0 ? { segments } : {}),
+      };
     } finally {
       await fs.promises.unlink(tmpAudio).catch(() => undefined);
     }
@@ -114,10 +135,18 @@ async function indexViaUpload(args: IndexJob): Promise<void> {
     text = eData.text || '';
   }
 
-  if (!text.trim()) throw new Error('No text extracted for indexing');
-
   const chunks = chunkText(text).slice(0, 500);
-  const collection = `user_${args.userId}`.replace(/-/g, '_');
+  if (chunks.length === 0) {
+    // A silent video/audio file is valid media, not a processing failure:
+    // complete the upload without vectors instead of marking it FAILED.
+    if (isMedia) {
+      logger.warn({ fileId: args.fileId }, 'No speech detected in media; completing without transcript');
+      return;
+    }
+    throw new Error('No text extracted for indexing');
+  }
+
+  const collection = vectorService.getCollectionName(args.userId);
   const firstEmbedding = await aiService.createEmbedding(chunks[0]);
   if (!(await vectorService.collectionExists(collection))) {
     await vectorService.createCollection(collection, firstEmbedding.length);
@@ -129,6 +158,7 @@ async function indexViaUpload(args: IndexJob): Promise<void> {
     chunk_index: i,
     metadata: {
       file_type: args.mimeType,
+      ...(i === 0 ? mediaMetadata : {}),
       ...(args.fileVersion !== undefined ? { doc_version: args.fileVersion } : {}),
       ...(args.originalName ? { original_name: args.originalName } : {}),
     },
@@ -137,6 +167,9 @@ async function indexViaUpload(args: IndexJob): Promise<void> {
   for (const chunk of chunks.slice(1)) {
     vectors.push(await aiService.createEmbedding(chunk));
   }
+  // Idempotent re-index: replace this file's old points only after new
+  // embeddings are ready.
+  await vectorService.deletePointsByFilter(collection, { file_id: args.fileId });
   const ok = await vectorService.upsertPoints(
     collection,
     vectors.map((vector, i) => ({ id: randomUUID(), vector, payload: payloads[i] }))

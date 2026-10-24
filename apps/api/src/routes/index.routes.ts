@@ -1,10 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
-import path from 'path';
 import { prisma } from '../config/db.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { requireSubscription } from '../middleware/subscription.js';
-import { config } from '../config/env.js';
+import { processVideoFile, processDocumentFile } from '../services/processing.service.js';
 import { logger } from '../config/logger.js';
 
 const router = Router();
@@ -37,38 +36,45 @@ router.post(
         return res.status(404).json({ error: 'File not found' });
       }
 
+      if (!file.path) {
+        return res.status(400).json({ error: 'File has no stored source to index' });
+      }
+
+      const previousStatus = file.status;
       await prisma.file.update({
         where: { id: fileId },
         data: { status: 'PROCESSING' as any },
       });
 
       try {
-        const aiResponse = await fetch(`${config.aiServiceUrl}/api/v1/documents/index`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            file_id: file.id,
-            file_path: path.resolve(file.path),
-            mime_type: file.mimeType,
-            user_id: req.user!.userId,
-          }),
-        });
-
-        if (aiResponse.ok) {
-          await prisma.file.update({
-            where: { id: fileId },
-            data: { status: 'COMPLETED' as any },
-          });
-          logger.info({ fileId }, 'File indexed successfully via AI service');
-          return res.json({ success: true, message: 'Indexing completed' });
+        const meta = (file.metadata as Record<string, unknown> | null) ?? {};
+        const job = {
+          id: `index:${fileId}`,
+          fileId,
+          inputPath: file.path,
+          mimeType: file.mimeType,
+          userId: req.user!.userId,
+          fileVersion: typeof meta.version === 'number' ? meta.version : undefined,
+          originalName: file.originalName,
+        };
+        const isMedia = file.mimeType.startsWith('video/') || file.mimeType.startsWith('audio/');
+        // Reuse the shared indexing pipeline: it tries direct path access
+        // and falls back to uploading bytes to the AI service, so re-index
+        // works even when API and AI run in separate containers.
+        if (isMedia) {
+          await processVideoFile(job);
         } else {
-          throw new Error('AI service returned error');
+          await processDocumentFile(job);
         }
+        logger.info({ fileId }, 'File indexed successfully');
+        return res.json({ success: true, message: 'Indexing completed' });
       } catch (aiError) {
+        // A failed re-index must not downgrade a previously usable file.
+        const restored = previousStatus === 'COMPLETED' ? 'COMPLETED' : 'FAILED';
         await prisma.file.update({
           where: { id: fileId },
-          data: { status: 'FAILED' as any },
-        });
+          data: { status: restored as any },
+        }).catch(() => undefined);
         logger.error({ aiError, fileId }, 'AI indexing failed');
         return res.status(500).json({ error: 'Indexing failed' });
       }

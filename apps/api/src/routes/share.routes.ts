@@ -4,7 +4,6 @@ import { randomBytes } from 'crypto';
 import { prisma } from '../config/db.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { requireSubscription } from '../middleware/subscription.js';
-import { config } from '../config/env.js';
 
 const router = Router();
 
@@ -19,15 +18,19 @@ const validateRequest = (req: Request, res: Response, next: NextFunction) => {
 const publicFile = (file: {
   id: string; originalName: string; mimeType: string; size: bigint | number;
   url: string | null; status: unknown; createdAt: Date;
-}) => ({
+}, origin: string) => ({
   id: file.id,
   originalName: file.originalName,
   mimeType: file.mimeType,
   size: Number(file.size),
-  // Direct media URL so shared pages play without API credentials.
-  url: file.url && file.url.startsWith('/')
-    ? `${config.storage.apiUrl}${file.url}`
-    : file.url,
+  // Direct media URL so shared pages play without API credentials. Build
+  // from the incoming request's origin: config.storage.apiUrl points at
+  // the container's localhost and would break every shared link.
+  url: file.url
+    ? (/^https?:\/\//i.test(file.url)
+        ? file.url
+        : `${origin}${file.url.startsWith('/') ? '' : '/'}${file.url}`)
+    : null,
   status: file.status,
   createdAt: file.createdAt,
 });
@@ -145,9 +148,10 @@ router.get('/resolve/:token', async (req: Request, res: Response, next: NextFunc
     }
 
     if (!link.file) return res.status(404).json({ error: 'File no longer exists' });
+    const origin = `${req.protocol}://${req.get('host')}`;
     res.json({
       link: { token: link.token, expiresAt: link.expiresAt, viewCount: link.viewCount + 1 },
-      file: publicFile(link.file as never),
+      file: publicFile(link.file as never, origin),
     });
   } catch (error) {
     next(error);

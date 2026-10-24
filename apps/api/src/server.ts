@@ -46,6 +46,11 @@ globalThis.fetch = ((url: Parameters<typeof fetch>[0], init: Parameters<typeof f
 
 const app = express();
 
+// Trust the reverse proxy (Caddy/Render/Vercel) so req.protocol reflects
+// X-Forwarded-Proto. Share links and download URLs are built from it and
+// would otherwise be emitted as http:// instead of https://.
+app.set('trust proxy', 1);
+
 // Media (<video>/<audio>/<img>) is consumed cross-origin by the web app in
 // production. Helmet's default same-origin resource policy makes browsers
 // refuse to load it, so videos silently never play. Auth on private media

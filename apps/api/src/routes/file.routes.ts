@@ -27,6 +27,20 @@ const THUMBNAIL_DIR = './storage/thumbnails';
 const isVideoOrAudio = (mimeType: string) =>
   mimeType.startsWith('video/') || mimeType.startsWith('audio/');
 
+/**
+ * Absolute URL for a stored file. Prefer the request's public origin so
+ * downloads/share links work behind a reverse proxy (Caddy, Render, etc.)
+ * instead of leaking the container's internal localhost address.
+ */
+const publicFileUrl = (req: Request, relativeOrAbsolute: string | null, fallbackPath: string): string => {
+  if (relativeOrAbsolute && /^https?:\/\//i.test(relativeOrAbsolute)) {
+    return relativeOrAbsolute;
+  }
+  const relative = relativeOrAbsolute || fallbackPath;
+  const normalized = relative.startsWith('/') ? relative : `/${relative}`;
+  return `${req.protocol}://${req.get('host')}${normalized}`;
+};
+
 const serializeFile = (file: {
   id: string; name: string; originalName: string; mimeType: string;
   size: bigint | number; path: string; url: string | null; status: unknown;
@@ -118,7 +132,27 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response, next
       return res.status(404).json({ error: 'File not found' });
     }
 
-    await storageService.deleteFile(file.path);
+    // Best-effort blob removal. Failed imports have no local path and a
+    // missing file on disk must not block deleting the database row.
+    if (file.path && file.path.trim()) {
+      try {
+        await storageService.deleteFile(file.path);
+      } catch (storageError) {
+        const code = (storageError as NodeJS.ErrnoException)?.code;
+        if (code !== 'ENOENT') {
+          logger.warn({ storageError, fileId: file.id }, 'Storage delete failed, continuing with metadata cleanup');
+        }
+      }
+    }
+
+    // Remove every indexed chunk so deleted content can never surface in
+    // semantic search or chat context again (search reads Qdrant directly).
+    try {
+      const collection = vectorService.getCollectionName(req.user!.userId);
+      await vectorService.deletePointsByFilter(collection, { file_id: req.params.id });
+    } catch (vectorError) {
+      logger.warn({ vectorError, fileId: req.params.id }, 'Vector cleanup failed');
+    }
 
     // Clean up cached thumbnails for this file.
     try {
@@ -152,7 +186,10 @@ router.get('/:id/download', authenticate, async (req: AuthRequest, res: Response
       return res.status(404).json({ error: 'File not found' });
     }
 
-    const downloadUrl = await storageService.getDownloadUrl(file.path, file.originalName);
+    // Build from the stored public URL when possible; `getDownloadUrl`
+    // relies on a configured base that is often container-local.
+    const fallback = `/storage/uploads/${path.basename(file.path || file.name)}`;
+    const downloadUrl = publicFileUrl(req, file.url, fallback);
     res.json({ url: downloadUrl });
   } catch (error) {
     next(error);
@@ -278,6 +315,23 @@ router.get('/:id/export/:format', authenticateMedia, requireSubscription, async 
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${base}.txt"`);
       return res.send(body);
+    }
+
+    // Older media indexed before timestamps were stored still deserves a
+    // downloadable subtitle. Distribute the stored chunks over the media
+    // duration so SRT/VTT exports work instead of failing with a 400.
+    if (segments.length === 0 && isVideoOrAudio(file.mimeType) && chunks.length > 0) {
+      const duration = typeof meta.duration === 'number' && meta.duration > 0
+        ? meta.duration
+        : Math.max(chunks.length * 5, 5);
+      const totalChars = chunks.reduce((sum, c) => sum + Math.max(c.text.length, 1), 0);
+      let cursor = 0;
+      for (const chunk of chunks) {
+        const weight = Math.max(chunk.text.length, 1) / totalChars;
+        const end = Math.min(duration, cursor + duration * weight);
+        segments.push({ start: cursor, end: Math.max(end, cursor + 0.5), text: chunk.text.trim() });
+        cursor = end;
+      }
     }
 
     if (segments.length === 0) {

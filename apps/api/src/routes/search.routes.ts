@@ -40,13 +40,17 @@ async function semanticSearch(
   try {
     const queryEmbedding = await aiService.createEmbedding(query);
 
-    const results = await vectorService.searchPoints(
+    // Drop points whose owning file no longer exists (e.g. deletion raced
+    // vector cleanup or predates it). Qdrant is not the source of truth for
+    // ownership - Prisma is.
+    const allowedFileIds = new Set(userFiles.map((f) => f.id));
+    const results = (await vectorService.searchPoints(
       collectionName,
       queryEmbedding,
       limit,
       0,
       fileId ? { file_id: fileId } : undefined
-    );
+    )).filter((r) => allowedFileIds.has(String((r.payload as Record<string, unknown>).file_id ?? '')));
 
     const fileIds = [...new Set(results.map((r) => String((r.payload as Record<string, unknown>).file_id ?? '')))].filter(Boolean);
     const files = fileIds.length > 0
@@ -185,6 +189,10 @@ router.post(
       if (!collectionExists) {
         await vectorService.createCollection(collectionName, dimension);
       }
+
+      // Idempotent re-index: replace this file's previous chunks rather than
+      // piling duplicates onto the collection.
+      await vectorService.deletePointsByFilter(collectionName, { file_id: fileId });
 
       await vectorService.upsertPoints(collectionName, [{
         id: randomUUID(),

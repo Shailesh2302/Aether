@@ -56,6 +56,8 @@ router.post(
     body('title').notEmpty().withMessage('Title is required'),
     body('startTime').isFloat({ min: 0 }).withMessage('Start time must be a positive number'),
     body('endTime').isFloat({ min: 0 }).withMessage('End time must be a positive number'),
+    body('endTime').custom((value, { req }) => Number(value) > Number(req.body.startTime))
+      .withMessage('End time must be greater than start time'),
   ],
   validateRequest,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -193,6 +195,26 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response, next
       return res.status(404).json({ error: 'Clip not found' });
     }
 
+    // Remove rendered artefacts (mp4/jpg/gif) so deleted clips do not
+    // accumulate on disk forever. Only basenames inside clipsDir are touched.
+    const clipsDir = path.resolve(config.storage.clipsDir);
+    const meta = (clip.metadata as Record<string, unknown> | null) ?? {};
+    const artefacts = [clip.videoUrl, clip.thumbnail, meta.gifUrl]
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
+      .map((v) => path.join(clipsDir, path.basename(v.split('?')[0])));
+    for (const artefact of artefacts) {
+      if (path.dirname(artefact) !== clipsDir) continue;
+      await fs.promises.unlink(artefact).catch((err) => {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+          logger.warn({ err, artefact }, 'Could not delete clip artefact');
+        }
+      });
+    }
+
+    // Share links have no FK to clips; revoke them explicitly or they would
+    // linger as dead public URLs.
+    await prisma.shareLink.deleteMany({ where: { clipId: clip.id } }).catch(() => undefined);
+
     await prisma.clip.delete({
       where: { id: req.params.id },
     });
@@ -212,6 +234,8 @@ router.post(
     body('fileId').notEmpty().withMessage('File ID is required'),
     body('startTime').isFloat({ min: 0 }).withMessage('Start time must be a positive number'),
     body('endTime').isFloat({ min: 0 }).withMessage('End time must be a positive number'),
+    body('endTime').custom((value, { req }) => Number(value) > Number(req.body.startTime))
+      .withMessage('End time must be greater than start time'),
     body('title').optional().isLength({ min: 1 }).withMessage('Title cannot be empty'),
   ],
   validateRequest,

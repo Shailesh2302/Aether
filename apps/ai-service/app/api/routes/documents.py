@@ -86,6 +86,8 @@ async def extract_document(
 
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         app_logger.error(f"Error extracting document: {e}")
         raise HTTPException(status_code=500, detail="Failed to extract document")
@@ -208,5 +210,12 @@ async def get_supported_types(api_key: API_KEY_DEP = None) -> dict:
                 "name": "Excel Spreadsheet",
             },
             {"mime": "text/plain", "extension": ".txt", "name": "Text File"},
+            {"mime": "text/markdown", "extension": ".md", "name": "Markdown"},
+            {"mime": "text/csv", "extension": ".csv", "name": "CSV Spreadsheet"},
+            {
+                "mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "extension": ".pptx",
+                "name": "PowerPoint Presentation",
+            },
         ]
     }

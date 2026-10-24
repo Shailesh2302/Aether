@@ -35,13 +35,17 @@ const fileFilter = (req: Express.Request, file: Express.Multer.File, cb: multer.
     'audio/webm',
     'text/plain',
     'text/markdown',
+    'text/x-markdown',
     'text/csv',
+    'application/csv',
   ];
 
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type'));
+    const error = new Error('Invalid file type') as Error & { status?: number };
+    error.status = 400;
+    cb(error);
   }
 };
 
@@ -71,9 +75,13 @@ const DOCUMENT_MIMES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
   'text/plain',
   'text/markdown',
+  'text/x-markdown',
   'text/csv',
+  'application/csv',
 ]);
 
 /**
@@ -168,6 +176,14 @@ async function processUploadedFile(
       // The file's DB row is updated when indexing finishes.
       void indexDocumentInBackground(dbFile.id, storageResult.path, mimeType, userId, versioning.version, originalName).catch((err) => {
         logger.error({ err, fileId: dbFile.id }, 'Background indexing crashed');
+      });
+    } else {
+      // The upload filter accepted a type no processing branch handles.
+      // Mark it FAILED instead of leaving a row stuck in PENDING forever.
+      logger.warn({ fileId: dbFile.id, mimeType }, 'No processor for uploaded mime type');
+      await prisma.file.update({
+        where: { id: dbFile.id },
+        data: { status: 'FAILED' },
       });
     }
   } catch (err) {

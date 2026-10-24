@@ -62,6 +62,9 @@ class ProcessingPipeline:
 
         doc_result: DocumentResult = await document_service.extract(file_path, mime_type)
 
+        if not doc_result.chunks:
+            raise ValueError("No extractable text found in document")
+
         return await self._index_chunks(
             chunks=doc_result.chunks,
             file_id=file_id,
@@ -97,6 +100,24 @@ class ProcessingPipeline:
             }
             for seg in transcript.segments
         ]
+
+        if not chunks:
+            # Silent/non-speech media is still a valid upload: report success
+            # with no vectors instead of failing the whole file.
+            app_logger.warning(f"No speech detected in media: {file_path}")
+            return {
+                "status": "empty",
+                "file_id": file_id,
+                "user_id": user_id,
+                "collection": collection,
+                "chunks_indexed": 0,
+                "metadata": {
+                    "transcript_language": transcript.language,
+                    "transcript_duration": transcript.duration_sec,
+                    "file_type": "audio",
+                    **(metadata or {}),
+                },
+            }
 
         return await self._index_chunks(
             chunks=chunks,
@@ -146,6 +167,11 @@ class ProcessingPipeline:
             await vector_service.create_collection(collection, settings.EMBEDDING_DIMENSION)
 
         embeddings = await embedding_service.embed_documents(chunks)
+
+        # Idempotent indexing: a re-index must replace this file's old
+        # chunks instead of duplicating them (which also inflates search
+        # result counts and saved-search hit totals).
+        await vector_service.delete_by_filter(collection, {"file_id": file_id})
 
         payloads = [
             {

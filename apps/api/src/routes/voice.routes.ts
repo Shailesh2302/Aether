@@ -14,7 +14,9 @@ const upload = multer({
     if (file.mimetype.startsWith('audio/') || file.mimetype === 'application/octet-stream') {
       cb(null, true);
     } else {
-      cb(new Error('Only audio uploads are accepted'));
+      const error = new Error('Only audio uploads are accepted') as Error & { status?: number };
+      error.status = 400;
+      cb(error);
     }
   },
 });

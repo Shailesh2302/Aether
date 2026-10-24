@@ -2,6 +2,10 @@ from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 import os
 import asyncio
+import csv
+import re
+import zipfile
+import xml.etree.ElementTree as ET
 
 import pypdf
 import pdfplumber
@@ -42,8 +46,15 @@ class DocumentService:
             "application/vnd.ms-excel",
         ]:
             return await self.extract_excel(file_path)
-        elif mime_type == "text/plain":
+        elif mime_type in ["text/plain", "text/markdown", "text/x-markdown"]:
             return await self.extract_txt(file_path)
+        elif mime_type in ["text/csv", "application/csv"]:
+            return await self.extract_csv(file_path)
+        elif mime_type in [
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/vnd.ms-powerpoint",
+        ]:
+            return await self.extract_pptx(file_path)
         else:
             raise ValueError(f"Unsupported file type: {mime_type}")
 
@@ -57,6 +68,11 @@ class DocumentService:
             ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             ".xls": "application/vnd.ms-excel",
             ".txt": "text/plain",
+            ".md": "text/markdown",
+            ".markdown": "text/markdown",
+            ".csv": "text/csv",
+            ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".ppt": "application/vnd.ms-powerpoint",
         }
 
         return mime_map.get(ext, "application/octet-stream")
@@ -237,6 +253,77 @@ class DocumentService:
 
         result = await asyncio.to_thread(_extract)
 
+        return DocumentResult(
+            text=result["text"],
+            chunks=result["chunks"],
+            metadata=result["metadata"],
+        )
+
+    async def extract_csv(self, file_path: str) -> DocumentResult:
+        app_logger.info(f"Extracting CSV: {file_path}")
+
+        def _extract():
+            with open(file_path, "r", encoding="utf-8-sig", errors="replace", newline="") as f:
+                sample = f.read(8192)
+                f.seek(0)
+                try:
+                    dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+                except csv.Error:
+                    dialect = csv.excel
+                rows = list(csv.reader(f, dialect))
+
+            lines = []
+            for row in rows:
+                line = " | ".join(cell.strip() for cell in row if cell and cell.strip())
+                if line:
+                    lines.append(line)
+
+            full_text = "\n".join(lines)
+            metadata = {
+                "rows": len(rows),
+                "columns": max((len(r) for r in rows), default=0),
+            }
+            chunks = chunker.chunk_text(full_text)
+            return {"text": full_text, "chunks": chunks, "metadata": metadata}
+
+        result = await asyncio.to_thread(_extract)
+        app_logger.info(f"CSV extracted: {result['metadata']['rows']} rows")
+        return DocumentResult(
+            text=result["text"],
+            chunks=result["chunks"],
+            metadata=result["metadata"],
+        )
+
+    async def extract_pptx(self, file_path: str) -> DocumentResult:
+        app_logger.info(f"Extracting PPTX: {file_path}")
+
+        def _extract():
+            if not zipfile.is_zipfile(file_path):
+                # Legacy binary .ppt is not a zip container; surface a clear
+                # error instead of an opaque zip exception.
+                raise ValueError("Legacy .ppt files are not supported - please save as .pptx")
+
+            slide_texts = []
+            with zipfile.ZipFile(file_path) as archive:
+                slide_names = sorted(
+                    (n for n in archive.namelist() if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)),
+                    key=lambda n: int(re.search(r"(\d+)", n).group(1)),
+                )
+                ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+                for slide_name in slide_names:
+                    root = ET.fromstring(archive.read(slide_name))
+                    runs = [node.text for node in root.findall(".//a:t", ns) if node.text]
+                    text = " ".join(run.strip() for run in runs if run.strip())
+                    if text:
+                        slide_texts.append(f"Slide {len(slide_texts) + 1}: {text}")
+
+            full_text = "\n\n".join(slide_texts)
+            metadata = {"slides": len(slide_texts)}
+            chunks = chunker.chunk_text(full_text)
+            return {"text": full_text, "chunks": chunks, "metadata": metadata}
+
+        result = await asyncio.to_thread(_extract)
+        app_logger.info(f"PPTX extracted: {result['metadata']['slides']} slides")
         return DocumentResult(
             text=result["text"],
             chunks=result["chunks"],

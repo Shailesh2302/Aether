@@ -42,7 +42,7 @@ class VectorService {
     };
   }
 
-  private getCollectionName(userId: string): string {
+  getCollectionName(userId: string): string {
     return `user_${userId}`.replace(/-/g, '_').replace(/:/g, '_');
   }
 
@@ -294,7 +294,8 @@ class VectorService {
     }
   }
 
-  async deletePoints(collection: string, ids: string[]): Promise<boolean> {    try {
+  async deletePoints(collection: string, ids: string[]): Promise<boolean> {
+    try {
       const response = await fetch(`${this.baseUrl}/collections/${collection}/points/delete`, {
         method: 'POST',
         headers: this.getHeaders(),
@@ -307,6 +308,38 @@ class VectorService {
     } catch (error) {
       logger.error({ error, collection, ids }, 'Failed to delete points');
       throw error;
+    }
+  }
+
+  /**
+   * Delete every point matching a payload filter (e.g. all chunks for a
+   * file). Used when a file is deleted or re-indexed so stale content can
+   * never leak back into search results or chat context.
+   */
+  async deletePointsByFilter(collection: string, filter: Record<string, unknown>): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/collections/${collection}/points/delete`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          filter: {
+            must: Object.entries(filter).map(([key, value]) => ({
+              key,
+              match: { value },
+            })),
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        logger.error({ err: body.slice(0, 300), collection, filter, status: response.status }, 'Qdrant filter delete failed');
+        return false;
+      }
+      return true;
+    } catch (error) {
+      logger.error({ err: error instanceof Error ? error.message : String(error), collection, filter }, 'Failed to delete points by filter');
+      return false;
     }
   }
 

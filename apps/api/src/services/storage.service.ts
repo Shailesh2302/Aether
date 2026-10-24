@@ -231,7 +231,8 @@ class StorageService {
     if (this.storageType === 'cloudinary') {
       return `https://res.cloudinary.com/${this.cloudName}/raw/upload/${relativePath}`;
     }
-    return `${config.storage.apiUrl}${relativePath}`;
+    const base = config.storage.apiUrl.replace(/\/+$/, '');
+    return `${base}${relativePath.startsWith('/') ? '' : '/'}${relativePath}`;
   }
 
   async getDownloadUrl(publicId: string, _originalName: string): Promise<string> {

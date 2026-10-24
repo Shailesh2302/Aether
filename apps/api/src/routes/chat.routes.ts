@@ -95,11 +95,9 @@ router.post(
           : searchResults;
 
         if (scoped.length > 0) {
-          context = scoped
-            .map((r) => r.payload.text as string)
-            .join('\n\n');
-
-          // Resolve owning files for version labels + conflict detection.
+          // Resolve owning files first: only context from files that still
+          // exist for this user may be sent to the model. This prevents
+          // deleted documents from leaking into answers via stale vectors.
           const hitIds = [...new Set(scoped.map((r) => String((r.payload as Record<string, unknown>).file_id ?? '')))].filter(Boolean);
           const hitFiles = hitIds.length > 0
             ? await prisma.file.findMany({
@@ -108,45 +106,53 @@ router.post(
               })
             : [];
           const fileById = new Map(hitFiles.map((f) => [f.id, f]));
+          const validScoped = scoped.filter((r) => fileById.has(String((r.payload as Record<string, unknown>).file_id ?? '')));
+
           const versionOf = (fid: string): number => {
             const f = fileById.get(fid);
             const v = Number((f?.metadata as Record<string, unknown> | null)?.version ?? 1);
             return Number.isFinite(v) && v > 0 ? v : 1;
           };
 
-          sources.push(...scoped.map((r) => {
-            const payload = r.payload as Record<string, unknown>;
-            const fid = String(payload.file_id ?? '');
-            const f = fileById.get(fid);
-            return {
-              text: payload.text as string,
-              score: r.score,
-              fileId: fid,
-              timestamp: (payload.metadata as Record<string, unknown>)?.start_sec as number,
-              version: versionOf(fid),
-              originalName: f?.originalName ?? String(payload.fileName ?? ''),
-            };
-          }));
+          if (validScoped.length > 0) {
+            context = validScoped
+              .map((r) => r.payload.text as string)
+              .join('\n\n');
 
-          versionNotes = hitFiles.map((f) => ({
-            fileId: f.id,
-            originalName: f.originalName,
-            version: versionOf(f.id),
-            uploadedAt: f.createdAt.toISOString(),
-          }));
+            sources.push(...validScoped.map((r) => {
+              const payload = r.payload as Record<string, unknown>;
+              const fid = String(payload.file_id ?? '');
+              const f = fileById.get(fid);
+              return {
+                text: payload.text as string,
+                score: r.score,
+                fileId: fid,
+                timestamp: (payload.metadata as Record<string, unknown>)?.start_sec as number,
+                version: versionOf(fid),
+                originalName: f?.originalName ?? String(payload.fileName ?? ''),
+              };
+            }));
 
-          // Conflict: context spans 2+ versions of the same document name.
-          const byDoc = new Map<string, Set<number>>();
-          for (const n of versionNotes) {
-            const key = n.originalName.toLowerCase();
-            if (!byDoc.has(key)) byDoc.set(key, new Set());
-            byDoc.get(key)!.add(n.version);
-          }
-          for (const [doc, versions] of byDoc) {
-            if (versions.size > 1) {
-              const original = versionNotes.find((n) => n.originalName.toLowerCase() === doc)?.originalName ?? doc;
-              versionConflict = { document: original, versions: [...versions].sort((a, b) => a - b) };
-              break;
+            versionNotes = hitFiles.map((f) => ({
+              fileId: f.id,
+              originalName: f.originalName,
+              version: versionOf(f.id),
+              uploadedAt: f.createdAt.toISOString(),
+            }));
+
+            // Conflict: context spans 2+ versions of the same document name.
+            const byDoc = new Map<string, Set<number>>();
+            for (const n of versionNotes) {
+              const key = n.originalName.toLowerCase();
+              if (!byDoc.has(key)) byDoc.set(key, new Set());
+              byDoc.get(key)!.add(n.version);
+            }
+            for (const [doc, versions] of byDoc) {
+              if (versions.size > 1) {
+                const original = versionNotes.find((n) => n.originalName.toLowerCase() === doc)?.originalName ?? doc;
+                versionConflict = { document: original, versions: [...versions].sort((a, b) => a - b) };
+                break;
+              }
             }
           }
         }
@@ -304,8 +310,15 @@ router.post(
           filterConditions
         );
 
-        if (searchResults.length > 0) {
-          context = searchResults
+        const hitIds = [...new Set(searchResults.map((r) => String((r.payload as Record<string, unknown>).file_id ?? '')))].filter(Boolean);
+        const ownedHits = hitIds.length > 0
+          ? await prisma.file.findMany({ where: { id: { in: hitIds }, userId }, select: { id: true } })
+          : [];
+        const ownedIds = new Set(ownedHits.map((f) => f.id));
+        const validResults = searchResults.filter((r) => ownedIds.has(String((r.payload as Record<string, unknown>).file_id ?? '')));
+
+        if (validResults.length > 0) {
+          context = validResults
             .map((r) => r.payload.text as string)
             .join('\n\n');
         }

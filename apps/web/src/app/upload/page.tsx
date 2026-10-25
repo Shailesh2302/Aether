@@ -25,6 +25,10 @@ import { toast } from "@/hooks/use-toast";
 
 const MAX_SIZE = 500 * 1024 * 1024;
 
+// Link imports (YouTube/Vimeo/direct URLs) are paused until the download
+// service is restored. Flip this back to true to re-enable the form.
+const LINK_IMPORT_AVAILABLE = false;
+
 function fileIcon(type: string) {
   if (type.startsWith("video/")) return <Video className="h-5 w-5" />;
   if (type.startsWith("audio/")) return <Music className="h-5 w-5" />;
@@ -69,6 +73,14 @@ export default function UploadPage() {
   const doneCount = uploads.filter((u) => u.status === "success").length;
 
   const handleImport = async () => {
+    if (!LINK_IMPORT_AVAILABLE) {
+      toast({
+        title: "Temporarily unavailable",
+        description: "Importing from a link is paused for now. Please upload a file from your device.",
+        variant: "destructive",
+      });
+      return;
+    }
     const url = importUrl.trim();
     if (!url || importing) return;
     setImporting(true);
@@ -190,6 +202,22 @@ export default function UploadPage() {
         <p className="mb-3 text-xs text-muted-foreground">
           YouTube, Vimeo or a direct media/PDF link. Download and processing run in the background.
         </p>
+
+        {!LINK_IMPORT_AVAILABLE && (
+          <div className="mb-4 flex items-start gap-3 border border-amber-500/40 bg-amber-500/[0.06] p-3">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-amber-400">
+                Temporarily unavailable
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Importing from a link is paused while the download service is being fixed.
+                Drag and drop a file above, or choose one from your device in the meantime.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Input
             value={importUrl}
@@ -200,10 +228,18 @@ export default function UploadPage() {
                 void handleImport();
               }
             }}
-            placeholder="https://youtube.com/watch?v=…"
+            placeholder={
+              LINK_IMPORT_AVAILABLE
+                ? "https://youtube.com/watch?v=…"
+                : "Link imports are temporarily unavailable"
+            }
+            disabled={!LINK_IMPORT_AVAILABLE || importing}
           />
-          <Button onClick={handleImport} disabled={!importUrl.trim() || importing}>
-            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Import"}
+          <Button
+            onClick={handleImport}
+            disabled={!LINK_IMPORT_AVAILABLE || !importUrl.trim() || importing}
+          >
+            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : LINK_IMPORT_AVAILABLE ? "Import" : "Unavailable"}
           </Button>
         </div>
       </div>

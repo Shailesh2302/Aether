@@ -61,6 +61,9 @@ model File {
 
   @@index([userId])
   @@index([status])
+  // Cursor pagination: WHERE userId = ? ORDER BY createdAt DESC, id DESC
+  @@index([userId, createdAt, id])
+  @@index([userId, status, createdAt])
   @@map("files")
 }
 
@@ -90,6 +93,7 @@ model Session {
 
   @@index([userId])
   @@index([fileId])
+  @@index([userId, type, updatedAt, id])
   @@map("sessions")
 }
 
@@ -115,6 +119,7 @@ model Message {
 
   @@index([sessionId])
   @@index([userId])
+  @@index([sessionId, createdAt, id])
   @@map("messages")
 }
 
@@ -145,6 +150,7 @@ model Job {
   @@index([userId])
   @@index([status])
   @@index([type])
+  @@index([status, createdAt])
   @@map("jobs")
 }
 
@@ -187,6 +193,8 @@ model Clip {
 
   @@index([userId])
   @@index([fileId])
+  @@index([userId, createdAt, id])
+  @@index([fileId, createdAt])
   @@map("clips")
 }
 

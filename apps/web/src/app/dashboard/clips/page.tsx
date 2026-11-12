@@ -48,6 +48,8 @@ import { toast } from "@/hooks/use-toast";
 export default function ClipsPage() {
   const { files, fetchFiles } = useUpload();
   const [clips, setClips] = useState<Clip[]>([]);
+  const [clipCursor, setClipCursor] = useState<string | null>(null);
+  const [clipsHasMore, setClipsHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [playingClip, setPlayingClip] = useState<Clip | null>(null);
@@ -82,11 +84,17 @@ export default function ClipsPage() {
     [fileList]
   );
 
-  const fetchClips = async () => {
+  const fetchClips = async (cursor?: string) => {
     try {
-      setIsLoading(true);
-      const list = await clipsApi.list();
-      setClips(list);
+      setIsLoading(!cursor);
+      const page = await clipsApi.list(undefined, { limit: 50, cursor });
+      setClips((prev) => {
+        if (!cursor) return page.clips;
+        const seen = new Set(prev.map((c) => c.id));
+        return [...prev, ...page.clips.filter((c) => !seen.has(c.id))];
+      });
+      setClipCursor(page.nextCursor);
+      setClipsHasMore(page.hasMore);
     } catch (err) {
       console.error(err);
       toast({
@@ -502,6 +510,22 @@ export default function ClipsPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+          {clipsHasMore && (
+            <div className="flex justify-center pt-4">
+              <Button
+                variant="outline"
+                onClick={() => fetchClips(clipCursor ?? undefined)}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Film className="h-4 w-4" />
+                )}
+                Load more clips
+              </Button>
             </div>
           )}
         </CardContent>

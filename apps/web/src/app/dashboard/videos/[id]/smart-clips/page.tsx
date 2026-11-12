@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { SegmentPreviewDialog } from "@/components/video/SegmentPreviewDialog";
 import { 
   ArrowLeft, 
   Loader2, 
@@ -29,6 +30,7 @@ export default function SmartClipsPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [preview, setPreview] = useState<SmartClip | null>(null);
 
   const generateSmartClips = useCallback(async () => {
     setGenerating(true);
@@ -229,7 +231,7 @@ export default function SmartClipsPage() {
         <div className="space-y-3">
           {filteredClips.map((clip, i) => (
             <Card key={i} className="hover:bg-accent cursor-pointer transition-colors"
-              onClick={() => router.push(`/dashboard/videos/${fileId}?t=${clip.start_sec}`)}
+              onClick={() => setPreview(clip)}
             >
               <CardContent className="p-4">
                 <div className="flex items-start gap-4">
@@ -252,9 +254,9 @@ export default function SmartClipsPage() {
                     <h4 className="font-medium mb-1">{clip.title}</h4>
                     <p className="text-sm text-muted-foreground">{clip.description}</p>
                   </div>
-                  <Button size="sm" variant="ghost" onClick={(e) => {
+                  <Button size="sm" variant="ghost" aria-label="Preview clip" onClick={(e) => {
                     e.stopPropagation();
-                    router.push(`/dashboard/videos/${fileId}?t=${clip.start_sec}`);
+                    setPreview(clip);
                   }}>
                     <Play className="h-4 w-4" />
                   </Button>
@@ -264,6 +266,17 @@ export default function SmartClipsPage() {
           ))}
         </div>
       )}
+
+      <SegmentPreviewDialog
+        open={!!preview}
+        onOpenChange={(open) => !open && setPreview(null)}
+        fileId={fileId}
+        startSec={preview?.start_sec ?? 0}
+        endSec={preview?.end_sec ?? 0}
+        title={preview?.title}
+        description={preview?.description}
+        allowCreateClip
+      />
     </div>
   );
 }

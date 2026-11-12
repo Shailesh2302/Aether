@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useUpload } from "@/hooks/useUpload";
+import { userApi, type UserStats } from "@/lib/api";
 import {
   Upload,
   FileText,
@@ -24,22 +25,33 @@ const QUICK_ACTIONS = [
 export default function DashboardOverviewPage() {
   const { user } = useAuth();
   const { files, fetchFiles } = useUpload();
+  const [remoteStats, setRemoteStats] = useState<UserStats | null>(null);
 
   useEffect(() => {
     fetchFiles();
+    userApi
+      .getStats()
+      .then(setRemoteStats)
+      .catch(() => undefined);
   }, [fetchFiles]);
 
   const fileList = useMemo(() => (Array.isArray(files) ? files : []), [files]);
 
   const stats = useMemo(() => {
-    const totalSize = fileList.reduce((sum, f) => {
-      const size = typeof f.size === "string" ? parseInt(f.size, 10) : f.size;
-      return sum + (Number.isFinite(size) ? size : 0);
-    }, 0);
-    const videos = fileList.filter((f) => getFileCategory(f.mimeType) === "video").length;
-    const docs = fileList.length - videos;
-    return { totalSize, videos, docs };
-  }, [fileList]);
+    // Server-side aggregates cover the whole library; the loaded page is only
+    // a fallback while /stats is in flight.
+    const totalSize =
+      remoteStats?.storageUsed ??
+      fileList.reduce((sum, f) => {
+        const size = typeof f.size === "string" ? parseInt(f.size, 10) : f.size;
+        return sum + (Number.isFinite(size) ? size : 0);
+      }, 0);
+    const totalFiles = remoteStats?.totalFiles ?? fileList.length;
+    const videos =
+      remoteStats?.fileTypes?.video ??
+      fileList.filter((f) => getFileCategory(f.mimeType) === "video").length;
+    return { totalSize, totalFiles, videos };
+  }, [fileList, remoteStats]);
 
   const recentFiles = useMemo(
     () =>
@@ -100,7 +112,7 @@ export default function DashboardOverviewPage() {
       {/* Stats */}
       <div className="reveal reveal-2 mt-8 grid grid-cols-3 gap-px border border-border bg-border">
         {[
-          { icon: <FileText className="h-3.5 w-3.5" />, v: String(fileList.length), l: "FILES" },
+          { icon: <FileText className="h-3.5 w-3.5" />, v: String(stats.totalFiles), l: "FILES" },
           { icon: <HardDrive className="h-3.5 w-3.5" />, v: formatFileSize(stats.totalSize), l: "STORAGE" },
           { icon: <Video className="h-3.5 w-3.5" />, v: String(stats.videos), l: "VIDEOS" },
         ].map((s) => (

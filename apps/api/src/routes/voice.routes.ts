@@ -40,8 +40,17 @@ router.post(
       const form = new FormData();
       form.append('file', new Blob([new Uint8Array(req.file.buffer)], { type: req.file.mimetype }), 'command.webm');
 
+      // Command mode: English-only, greedy decoding (beam 1), VAD-trimmed.
+      // This is materially faster than the general transcription path.
+      const params = new URLSearchParams({
+        command: 'true',
+        language: 'en',
+        beam_size: '1',
+        vad_filter: 'true',
+      });
+
       const aiResponse = await fetchWithTimeout(
-        `${config.aiServiceUrl}/api/v1/transcription`,
+        `${config.aiServiceUrl}/api/v1/transcription?${params.toString()}`,
         { method: 'POST', body: form },
         120_000
       );

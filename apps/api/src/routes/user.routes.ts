@@ -78,27 +78,35 @@ router.put('/profile', authenticate, async (req: AuthRequest, res: Response, nex
 
 router.get('/stats', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const [totalFiles, totalClips, totalSessions, files] = await Promise.all([
-      prisma.file.count({ where: { userId: req.user!.userId } }),
-      prisma.clip.count({ where: { userId: req.user!.userId } }),
-      prisma.session.count({ where: { userId: req.user!.userId } }),
-      prisma.file.findMany({
-        where: { userId: req.user!.userId },
-        select: { size: true, mimeType: true },
+    const userId = req.user!.userId;
+    // Aggregate in Postgres instead of loading every file row into Node; this
+    // keeps /stats O(1)-ish for users with very large libraries.
+    const [totalFiles, totalClips, totalSessions, storage, byMime] = await Promise.all([
+      prisma.file.count({ where: { userId } }),
+      prisma.clip.count({ where: { userId } }),
+      prisma.session.count({ where: { userId } }),
+      prisma.file.aggregate({
+        where: { userId },
+        _sum: { size: true },
+      }),
+      prisma.file.groupBy({
+        by: ['mimeType'],
+        where: { userId },
+        _count: { _all: true },
       }),
     ]);
 
-    const storageUsed = files.reduce((sum, f) => sum + Number(f.size), 0);
+    const storageUsed = Number(storage._sum.size ?? 0);
     const fileTypes: Record<string, number> = {};
-    for (const f of files) {
-      const category = f.mimeType.startsWith('video/')
+    for (const row of byMime) {
+      const category = row.mimeType.startsWith('video/')
         ? 'video'
-        : f.mimeType.startsWith('audio/')
+        : row.mimeType.startsWith('audio/')
           ? 'audio'
-          : f.mimeType === 'application/pdf'
+          : row.mimeType === 'application/pdf'
             ? 'pdf'
             : 'document';
-      fileTypes[category] = (fileTypes[category] ?? 0) + 1;
+      fileTypes[category] = (fileTypes[category] ?? 0) + row._count._all;
     }
 
     // Flat shape: the web settings page reads totalFiles/storageUsed directly.

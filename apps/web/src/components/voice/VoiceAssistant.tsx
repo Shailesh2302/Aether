@@ -86,6 +86,8 @@ export function VoiceAssistant() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  // Cleans up the WebAudio silence monitor + max-duration timer.
+  const recorderCleanupRef = useRef<(() => void) | null>(null);
 
   // Client-only: zustand-persist rehydrates auth from localStorage after
   // mount, so the server render (signed-out) would mismatch a logged-in
@@ -121,6 +123,8 @@ export function VoiceAssistant() {
 
   const stopRecording = useCallback(() => {
     setRecording(false);
+    recorderCleanupRef.current?.();
+    recorderCleanupRef.current = null;
     try {
       recorderRef.current?.stop();
     } catch {
@@ -182,8 +186,14 @@ export function VoiceAssistant() {
 
       // openFile
       try {
-        const files: FileItem[] = await filesApi.list();
-        const ranked = rankFiles(intent.query, files);
+        // Ask the server for matching files instead of downloading the whole
+        // library; fall back to recent files if the phrase doesn't match.
+        let page = await filesApi.list({ q: intent.query, limit: 20 });
+        let ranked = rankFiles(intent.query, page.files as FileItem[]);
+        if (ranked.length === 0) {
+          page = await filesApi.list({ limit: 60 });
+          ranked = rankFiles(intent.query, page.files as FileItem[]);
+        }
 
         if (ranked.length === 0) {
           const msg = `I couldn't find anything matching ${intent.query}.`;
@@ -378,6 +388,8 @@ export function VoiceAssistant() {
       } catch {
         // unmounting
       }
+      recorderCleanupRef.current?.();
+      recorderCleanupRef.current = null;
       try {
         recorderRef.current?.stop();
       } catch {
@@ -401,15 +413,28 @@ export function VoiceAssistant() {
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
       streamRef.current = stream;
       chunksRef.current = [];
-      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : undefined;
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : undefined;
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       rec.ondataavailable = (e: BlobEvent) => {
         if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
       rec.onstop = async () => {
+        recorderCleanupRef.current?.();
+        recorderCleanupRef.current = null;
         setRecording(false);
         const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
         chunksRef.current = [];
@@ -437,6 +462,75 @@ export function VoiceAssistant() {
           setPhase("idle");
         }
       };
+      // Auto-stop on ~1.4s of silence (after speech starts) or 15s max, so
+      // the user doesn't have to tap again and we never send long dead air
+      // to Whisper.
+      let silenceTimer: ReturnType<typeof setInterval> | null = null;
+      let maxTimer: ReturnType<typeof setTimeout> | null = null;
+      let audioCtx: AudioContext | null = null;
+
+      recorderCleanupRef.current = () => {
+        if (silenceTimer) clearInterval(silenceTimer);
+        if (maxTimer) clearTimeout(maxTimer);
+        silenceTimer = null;
+        maxTimer = null;
+        if (audioCtx) {
+          audioCtx.close().catch(() => undefined);
+          audioCtx = null;
+        }
+      };
+
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          audioCtx = new AudioCtx();
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 1024;
+          audioCtx.createMediaStreamSource(stream).connect(analyser);
+          const samples = new Uint8Array(analyser.fftSize);
+          let spoke = false;
+          let silenceSince = 0;
+
+          silenceTimer = setInterval(() => {
+            analyser.getByteTimeDomainData(samples);
+            let sum = 0;
+            for (let i = 0; i < samples.length; i++) {
+              const v = (samples[i] - 128) / 128;
+              sum += v * v;
+            }
+            const rms = Math.sqrt(sum / samples.length);
+            if (rms > 0.02) {
+              spoke = true;
+              silenceSince = 0;
+            } else if (spoke) {
+              if (!silenceSince) {
+                silenceSince = Date.now();
+              } else if (Date.now() - silenceSince > 1400) {
+                setDebug("auto-stop: silence");
+                try {
+                  rec.stop();
+                } catch {
+                  // already stopping
+                }
+              }
+            }
+          }, 150);
+        }
+      } catch {
+        // Audio analysis is best-effort; recording still works without it.
+      }
+
+      maxTimer = setTimeout(() => {
+        setDebug("auto-stop: 15s limit");
+        try {
+          rec.stop();
+        } catch {
+          // already stopping
+        }
+      }, 15_000);
+
       recorderRef.current = rec;
       setTranscript("");
       setRecording(true);

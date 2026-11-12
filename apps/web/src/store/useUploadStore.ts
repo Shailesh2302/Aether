@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { filesApi, type FileItem, extractErrorMessage } from "@/lib/api";
+import {
+  filesApi,
+  type FileItem,
+  type FileListParams,
+  extractErrorMessage,
+} from "@/lib/api";
 
 export interface UploadItem {
   id: string;
@@ -13,13 +18,18 @@ export interface UploadItem {
 interface UploadState {
   uploads: UploadItem[];
   files: FileItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  /** Last filters used for the file list, replayed by fetchMoreFiles. */
+  listParams: FileListParams;
   isLoading: boolean;
   isFetching: boolean;
   error: string | null;
   uploadFile: (file: File) => Promise<FileItem | null>;
   removeUpload: (id: string) => void;
   clearUploads: () => void;
-  fetchFiles: () => Promise<void>;
+  fetchFiles: (params?: FileListParams) => Promise<void>;
+  fetchMoreFiles: () => Promise<void>;
   deleteFile: (id: string) => Promise<void>;
   addLocalFile: (file: FileItem) => void;
   pollFileStatus: (id: string) => void;
@@ -27,6 +37,10 @@ interface UploadState {
 }
 
 const pollTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+// Monotonic request id so a slow, stale list response cannot overwrite the
+// results of a newer search/filter request.
+let listRequestSeq = 0;
 
 function stopPoll(id: string) {
   const t = pollTimers.get(id);
@@ -39,6 +53,9 @@ function stopPoll(id: string) {
 export const useUploadStore = create<UploadState>((set, get) => ({
   uploads: [],
   files: [],
+  nextCursor: null,
+  hasMore: false,
+  listParams: {},
   isLoading: false,
   isFetching: false,
   error: null,
@@ -124,14 +141,52 @@ export const useUploadStore = create<UploadState>((set, get) => ({
     });
   },
 
-  fetchFiles: async () => {
-    set({ isFetching: true, error: null });
+  fetchFiles: async (params = {}) => {
+    const seq = ++listRequestSeq;
+    set({ isFetching: true, error: null, listParams: params });
     try {
-      const files = await filesApi.list();
-      set({ files, isFetching: false });
+      const page = await filesApi.list({ limit: 60, ...params });
+      if (seq !== listRequestSeq) return;
+      set({
+        files: page.files,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
+        isFetching: false,
+      });
     } catch (error) {
+      if (seq !== listRequestSeq) return;
       set({
         error: extractErrorMessage(error, "Failed to load files"),
+        isFetching: false,
+      });
+    }
+  },
+
+  fetchMoreFiles: async () => {
+    const { nextCursor, hasMore, isFetching, listParams } = get();
+    if (!hasMore || !nextCursor || isFetching) return;
+    const seq = ++listRequestSeq;
+    set({ isFetching: true, error: null });
+    try {
+      const page = await filesApi.list({
+        limit: 60,
+        ...listParams,
+        cursor: nextCursor,
+      });
+      if (seq !== listRequestSeq) return;
+      set((state) => {
+        const seen = new Set(state.files.map((f) => f.id));
+        return {
+          files: [...state.files, ...page.files.filter((f) => !seen.has(f.id))],
+          nextCursor: page.nextCursor,
+          hasMore: page.hasMore,
+          isFetching: false,
+        };
+      });
+    } catch (error) {
+      if (seq !== listRequestSeq) return;
+      set({
+        error: extractErrorMessage(error, "Failed to load more files"),
         isFetching: false,
       });
     }

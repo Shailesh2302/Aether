@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/db.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { requireSubscription } from '../middleware/subscription.js';
@@ -24,13 +25,26 @@ const validateRequest = (req: Request, res: Response, next: NextFunction) => {
 router.get('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { fileId } = req.query;
-    const where: any = { userId: req.user!.userId };
-    if (fileId) {
-      where.fileId = fileId as string;
+    const limit = Math.min(
+      Math.max(Number(req.query.limit) || 50, 1),
+      200
+    );
+    const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : undefined;
+    const status = typeof req.query.status === 'string' ? req.query.status.toUpperCase() : '';
+
+    const where: Prisma.ClipWhereInput = { userId: req.user!.userId };
+    if (typeof fileId === 'string' && fileId) {
+      where.fileId = fileId;
     }
+    if (['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'].includes(status)) {
+      where.status = status as Prisma.ClipWhereInput['status'];
+    }
+
     const clips = await prisma.clip.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         file: {
           select: {
@@ -41,7 +55,14 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
         },
       },
     });
-    res.json({ clips });
+
+    const hasMore = clips.length > limit;
+    const page = hasMore ? clips.slice(0, limit) : clips;
+    res.json({
+      clips: page,
+      nextCursor: hasMore && page.length > 0 ? page[page.length - 1].id : null,
+      hasMore,
+    });
   } catch (error) {
     next(error);
   }
@@ -298,9 +319,10 @@ router.post(
           }
           throw new Error('Rust worker failed');
         } catch (rustError) {
-          logger.info({ clipId: clip.id }, 'Cutting via queue worker');
-          if (!queueService.isConnected()) {
-            // No Redis: cut inline in the background instead of stalling.
+          logger.info({ clipId: clip.id }, 'Rust worker unavailable, choosing Node cut path');
+          const cutInline = async () => {
+            // Cut inside the API process rather than handing the job to a
+            // queue nobody consumes.
             const { processClipFile } = await import('../services/processing.service.js');
             void processClipFile({
               id: `inline:${clip.id}`,
@@ -310,19 +332,27 @@ router.post(
               endTime,
               clipId: clip.id,
             }).catch(() => undefined);
+          };
+
+          const workerAlive =
+            queueService.isConnected() && (await queueService.hasClipWorker());
+          if (!workerAlive) {
+            logger.info({ clipId: clip.id }, 'No queue worker alive - cutting inline');
+            await cutInline();
             return;
           }
-          try {
-            await queueService.addClipGenerationJob({
-              fileId,
-              filePath: file.path,
-              startTime,
-              endTime,
-              userId: req.user!.userId,
-              clipId: clip.id,
-            });
-          } catch (queueError) {
-            logger.warn({ queueError }, 'Queue unavailable, clip will be processed async');
+
+          const queuedJobId = await queueService.addClipGenerationJob({
+            fileId,
+            filePath: file.path,
+            startTime,
+            endTime,
+            userId: req.user!.userId,
+            clipId: clip.id,
+          });
+          if (!queuedJobId) {
+            logger.warn({ clipId: clip.id }, 'Enqueue failed - cutting inline');
+            await cutInline();
           }
         }
       })();

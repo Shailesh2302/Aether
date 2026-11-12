@@ -633,11 +633,34 @@ function withThumbUrl<T extends { id: string; mimeType: string; thumbnailUrl?: s
   return file;
 }
 
+export interface FileListParams {
+  limit?: number;
+  cursor?: string | null;
+  q?: string;
+  status?: FileStatus;
+  type?: "video" | "audio" | "image" | "document" | "all";
+  favorite?: boolean;
+}
+
+export interface FileListPage {
+  files: FileItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 export const filesApi = {
-  async list(): Promise<FileItem[]> {
-    const { data } = await api.get<{ files?: FileItem[] } | FileItem[]>("/files");
-    const files = Array.isArray(data) ? data : (data.files ?? []);
-    return files.map(withThumbUrl);
+  async list(params: FileListParams = {}): Promise<FileListPage> {
+    const { data } = await api.get<
+      { files?: FileItem[]; nextCursor?: string | null; hasMore?: boolean } | FileItem[]
+    >("/files", { params: cleanParams(params) });
+    if (Array.isArray(data)) {
+      return { files: data.map(withThumbUrl), nextCursor: null, hasMore: false };
+    }
+    return {
+      files: (data.files ?? []).map(withThumbUrl),
+      nextCursor: data.nextCursor ?? null,
+      hasMore: Boolean(data.hasMore),
+    };
   },
 
   async get(id: string) {
@@ -722,6 +745,77 @@ export const filesApi = {
 // Chat API
 // ============================================================================
 
+export interface ChatStreamOptions {
+  fileId?: string;
+  fileIds?: string[];
+  sessionId?: string;
+  signal?: AbortSignal;
+}
+
+export interface ChatStreamHandlers {
+  onSession?: (sessionId: string) => void;
+  onSources?: (
+    sources: ChatSource[],
+    versionNotes: VersionNote[],
+    versionConflict: VersionConflict | null
+  ) => void;
+  onChunk?: (chunk: string) => void;
+}
+
+/**
+ * Consumes an SSE body with proper buffering: a network chunk may contain a
+ * partial event or several events at once, so events are only parsed once a
+ * blank-line delimiter has arrived.
+ */
+async function consumeSSE(
+  response: Response,
+  onEvent: (event: Record<string, unknown>) => void
+): Promise<void> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Streaming is not supported by this browser");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const processBlock = (block: string) => {
+    for (const line of block.split("\n")) {
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      if (payload === "[DONE]") {
+        onEvent({ done: true });
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(payload);
+        if (parsed && typeof parsed === "object") {
+          onEvent(parsed as Record<string, unknown>);
+        }
+      } catch {
+        // Ignore malformed/keepalive payloads.
+      }
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    buffer = buffer.replace(/\r\n/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      processBlock(block);
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+
+  buffer += decoder.decode();
+  buffer = buffer.replace(/\r\n/g, "\n").trim();
+  if (buffer) processBlock(buffer);
+}
+
 export const chatApi = {
   async send(
     message: string,
@@ -736,6 +830,89 @@ export const chatApi = {
       transcript,
     });
     return data;
+  },
+
+  /**
+   * Streams a chat response from POST /chat/stream. Returns the full assembled
+   * message so callers can persist/finalize it after the stream ends.
+   */
+  async stream(
+    message: string,
+    options: ChatStreamOptions = {},
+    handlers: ChatStreamHandlers = {}
+  ): Promise<ChatResponse> {
+    const response = await fetch(`${API_URL}/chat/stream`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+      body: JSON.stringify({
+        message,
+        ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+        ...(options.fileIds?.length
+          ? { fileIds: options.fileIds }
+          : options.fileId
+            ? { fileId: options.fileId }
+            : {}),
+      }),
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      let detail = `Request failed (${response.status})`;
+      try {
+        const body = (await response.json()) as { error?: string; message?: string };
+        detail = body.error || body.message || detail;
+      } catch {
+        // Non-JSON error body.
+      }
+      throw new Error(detail);
+    }
+
+    let fullContent = "";
+    let sessionId = options.sessionId;
+    let sources: ChatSource[] = [];
+    let versionNotes: VersionNote[] = [];
+    let versionConflict: VersionConflict | null = null;
+
+    await consumeSSE(response, (event) => {
+      if (typeof event.error === "string" && event.error) {
+        throw new Error(event.error);
+      }
+      if (typeof event.sessionId === "string" && event.sessionId) {
+        sessionId = event.sessionId;
+        handlers.onSession?.(event.sessionId);
+      }
+      if (Array.isArray(event.sources)) {
+        sources = event.sources as ChatSource[];
+        versionNotes = Array.isArray(event.versionNotes)
+          ? (event.versionNotes as VersionNote[])
+          : [];
+        versionConflict =
+          event.versionConflict && typeof event.versionConflict === "object"
+            ? (event.versionConflict as VersionConflict)
+            : null;
+        handlers.onSources?.(sources, versionNotes, versionConflict);
+      }
+      if (typeof event.content === "string" && event.content) {
+        fullContent += event.content;
+        handlers.onChunk?.(event.content);
+      }
+    });
+
+    if (!fullContent.trim()) {
+      throw new Error("The assistant returned an empty response. Please try again.");
+    }
+
+    return {
+      message: fullContent,
+      sessionId,
+      sources,
+      versionNotes,
+      versionConflict,
+    };
   },
 };
 
@@ -757,13 +934,33 @@ export const searchApi = {
 // Clips API
 // ============================================================================
 
+export interface ClipListParams {
+  limit?: number;
+  cursor?: string | null;
+  status?: ClipStatus;
+}
+
+export interface ClipListPage {
+  clips: Clip[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 export const clipsApi = {
-  async list(fileId?: string): Promise<Clip[]> {
-    const { data } = await api.get<{ clips?: Clip[] } | Clip[]>("/clips", {
-      params: fileId ? { fileId } : undefined,
+  async list(fileId?: string, params: ClipListParams = {}): Promise<ClipListPage> {
+    const { data } = await api.get<
+      { clips?: Clip[]; nextCursor?: string | null; hasMore?: boolean } | Clip[]
+    >("/clips", {
+      params: cleanParams({ fileId, ...params }),
     });
-    if (Array.isArray(data)) return data;
-    return data.clips ?? [];
+    if (Array.isArray(data)) {
+      return { clips: data, nextCursor: null, hasMore: false };
+    }
+    return {
+      clips: data.clips ?? [],
+      nextCursor: data.nextCursor ?? null,
+      hasMore: Boolean(data.hasMore),
+    };
   },
 
   async get(id: string): Promise<Clip> {
@@ -823,7 +1020,7 @@ export const clipsApi = {
 // Video Intelligence API
 // ============================================================================
 
-function cleanParams<T extends Record<string, unknown>>(obj: T): Partial<T> {
+function cleanParams<T extends object>(obj: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined && v !== null)
   ) as Partial<T>;

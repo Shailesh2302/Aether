@@ -5,8 +5,23 @@ import { config } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/db.js';
 import { vectorService } from '../services/vector.service.js';
+import { cached, TtlCache } from '../utils/cache.js';
 
 const router = Router();
+
+interface StatusPayload {
+  file_id: string;
+  status: string;
+  progress: number;
+  transcript_ready: boolean;
+  indexed: boolean;
+  moments_detected: number;
+  highlights_generated: number;
+}
+
+// Polled every few seconds by the status UI. A short shared cache removes
+// the Qdrant scroll from almost every poll without hiding state for long.
+const statusCache = new TtlCache<StatusPayload | null>(8_000, 5_000);
 
 const requireOwnedFile = async (fileId: unknown, userId: string): Promise<boolean> => {
   if (!fileId || typeof fileId !== 'string') return false;
@@ -102,8 +117,12 @@ router.post(
       logger.info(`Processing video question: fileId=${fileId}`);
 
       res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
+      // Disable reverse-proxy buffering so answer tokens are delivered as
+      // they are produced instead of after the whole response completes.
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders?.();
 
       const response = await fetch(`${config.aiServiceUrl}/api/v1/ask`, {
         method: 'POST',
@@ -129,9 +148,12 @@ router.post(
         const readStream = () => {
           reader.read().then(({ done, value }) => {
             if (done) {
+              // Flush any multi-byte character split across the last chunk.
+              const tail = decoder.decode();
+              if (tail) res.write(tail);
               res.end();
             } else {
-              res.write(decoder.decode(value));
+              res.write(decoder.decode(value, { stream: true }));
               readStream();
             }
           }).catch((err) => {
@@ -144,6 +166,11 @@ router.post(
 
     } catch (error) {
       logger.error({ error }, 'Error processing video question');
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({ error: 'The answer stream could not be started.' })}\n\n`);
+        res.end();
+        return;
+      }
       next(error);
     }
   }
@@ -157,52 +184,65 @@ router.get(
       const { fileId } = req.params;
       const userId = req.user!.userId;
 
-      const file = await prisma.file.findFirst({
-        where: { id: fileId, userId },
-        select: { id: true, status: true, metadata: true, mimeType: true },
-      });
-      if (!file) {
+      const payload = await cached(
+        `video-status:${userId}:${fileId}`,
+        8,
+        async () => {
+          const file = await prisma.file.findFirst({
+            where: { id: fileId, userId },
+            select: { id: true, status: true, metadata: true, mimeType: true },
+          });
+          if (!file) return null;
+
+          // "Indexed" means vectors exist; the DB status alone cannot tell us
+          // that (e.g. a silent video completes without a transcript).
+          let indexed = false;
+          try {
+            const collection = `user_${userId}`.replace(/-/g, '_');
+            const points = await vectorService.scrollPoints(collection, fileId, 1, {
+              timeoutMs: 1500,
+            });
+            indexed = points.length > 0;
+          } catch (vectorError) {
+            logger.warn({ vectorError, fileId }, 'Could not read video status from vector store');
+          }
+
+          const meta = (file.metadata as Record<string, unknown> | null) ?? {};
+          const smartClips = (meta.smartClips as { clips?: unknown[] } | undefined)?.clips;
+          const highlightsCount = Number(meta.highlightsGenerated)
+            || (Array.isArray(meta.highlights) ? (meta.highlights as unknown[]).length : 0)
+            || (Array.isArray(smartClips) ? smartClips.length : 0);
+          const momentsCount = Number(meta.momentsDetected)
+            || (Array.isArray(meta.moments) ? (meta.moments as unknown[]).length : 0);
+
+          // The web UI expects lowercase lifecycle states and a 0-100 progress.
+          const statusMap: Record<string, string> = {
+            PENDING: 'pending',
+            PROCESSING: 'processing',
+            COMPLETED: 'completed',
+            FAILED: 'failed',
+          };
+          const status = statusMap[file.status] ?? 'pending';
+          const progress = status === 'completed' ? 100 : status === 'processing' ? 50 : status === 'failed' ? 0 : 10;
+
+          return {
+            file_id: fileId,
+            status,
+            progress,
+            transcript_ready: indexed,
+            indexed,
+            moments_detected: Number.isFinite(momentsCount) ? momentsCount : 0,
+            highlights_generated: Number.isFinite(highlightsCount) ? highlightsCount : 0,
+          };
+        },
+        statusCache
+      );
+
+      if (!payload) {
         return res.status(404).json({ error: 'File not found' });
       }
-
-      // "Indexed" means vectors exist; the DB status alone cannot tell us
-      // that (e.g. a silent video completes without a transcript).
-      let indexed = false;
-      try {
-        const collection = `user_${userId}`.replace(/-/g, '_');
-        const points = await vectorService.scrollPoints(collection, fileId, 1);
-        indexed = points.length > 0;
-      } catch (vectorError) {
-        logger.warn({ vectorError, fileId }, 'Could not read video status from vector store');
-      }
-
-      const meta = (file.metadata as Record<string, unknown> | null) ?? {};
-      const smartClips = (meta.smartClips as { clips?: unknown[] } | undefined)?.clips;
-      const highlightsCount = Number(meta.highlightsGenerated)
-        || (Array.isArray(meta.highlights) ? (meta.highlights as unknown[]).length : 0)
-        || (Array.isArray(smartClips) ? smartClips.length : 0);
-      const momentsCount = Number(meta.momentsDetected)
-        || (Array.isArray(meta.moments) ? (meta.moments as unknown[]).length : 0);
-
-      // The web UI expects lowercase lifecycle states and a 0-100 progress.
-      const statusMap: Record<string, string> = {
-        PENDING: 'pending',
-        PROCESSING: 'processing',
-        COMPLETED: 'completed',
-        FAILED: 'failed',
-      };
-      const status = statusMap[file.status] ?? 'pending';
-      const progress = status === 'completed' ? 100 : status === 'processing' ? 50 : status === 'failed' ? 0 : 10;
-
-      res.json({
-        file_id: fileId,
-        status,
-        progress,
-        transcript_ready: indexed,
-        indexed,
-        moments_detected: Number.isFinite(momentsCount) ? momentsCount : 0,
-        highlights_generated: Number.isFinite(highlightsCount) ? highlightsCount : 0,
-      });
+      res.setHeader('Cache-Control', 'private, max-age=5');
+      res.json(payload);
     } catch (error) {
       logger.error({ error }, 'Error getting video status');
       next(error);
@@ -287,7 +327,18 @@ router.post(
       const data = await response.json() as { clips?: unknown[] };
       if (Array.isArray(data.clips) && data.clips.length > 0) {
         const existing = Array.isArray(cached?.clips) ? cached!.clips! : [];
-        const merged = [...existing, ...data.clips.filter((c) => !existing.some((e) => JSON.stringify(e) === JSON.stringify(c)))];
+        const clipKey = (c: unknown): string => {
+          const o = (c ?? {}) as Record<string, unknown>;
+          return `${Number(o.start_sec) || 0}:${Number(o.end_sec) || 0}`;
+        };
+        const seen = new Set(existing.map(clipKey));
+        const merged = [...existing];
+        for (const clip of data.clips) {
+          const key = clipKey(clip);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push(clip);
+        }
         const freshMeta: FileMeta = {
           ...owned.meta,
           smartClips: { clips: merged.slice(0, 20), cachedAt: new Date().toISOString() },

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { SegmentPreviewDialog } from "@/components/video/SegmentPreviewDialog";
 import { 
   ArrowLeft, 
   Loader2, 
@@ -63,6 +64,13 @@ interface VideoSummary {
   duration_sec: number;
 }
 
+interface PreviewSegment {
+  startSec: number;
+  endSec: number;
+  title: string;
+  description?: string;
+}
+
 export default function VideoIntelligencePage() {
   const params = useParams();
   const router = useRouter();
@@ -85,6 +93,7 @@ export default function VideoIntelligencePage() {
   
   const [smartClips, setSmartClips] = useState<SmartClip[]>([]);
   const [clipsLoading, setClipsLoading] = useState(false);
+  const [preview, setPreview] = useState<PreviewSegment | null>(null);
 
   const fetchStatus = async () => {
     try {
@@ -324,7 +333,19 @@ export default function VideoIntelligencePage() {
                             {formatTime(moment.start_sec)} - {formatTime(moment.end_sec)}
                           </span>
                         </div>
-                        <Button size="sm" variant="ghost">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label="Play moment"
+                          onClick={() =>
+                            setPreview({
+                              startSec: moment.start_sec,
+                              endSec: moment.end_sec,
+                              title: `Moment at ${formatTime(moment.start_sec)}`,
+                              description: moment.description,
+                            })
+                          }
+                        >
                           <Play className="h-4 w-4" />
                         </Button>
                       </div>
@@ -373,7 +394,19 @@ export default function VideoIntelligencePage() {
                             {formatTime(highlight.start_sec)} - {formatTime(highlight.end_sec)}
                           </span>
                         </div>
-                        <Button size="sm" variant="ghost">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label="Play highlight"
+                          onClick={() =>
+                            setPreview({
+                              startSec: highlight.start_sec,
+                              endSec: highlight.end_sec,
+                              title: highlight.title,
+                              description: highlight.summary,
+                            })
+                          }
+                        >
                           <Play className="h-4 w-4" />
                         </Button>
                       </div>
@@ -535,7 +568,19 @@ export default function VideoIntelligencePage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Button size="sm" variant="ghost">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-label="Play smart clip"
+                            onClick={() =>
+                              setPreview({
+                                startSec: clip.start_sec,
+                                endSec: clip.end_sec,
+                                title: clip.title,
+                                description: clip.description,
+                              })
+                            }
+                          >
                             <Play className="h-4 w-4" />
                           </Button>
                         </div>
@@ -550,6 +595,17 @@ export default function VideoIntelligencePage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <SegmentPreviewDialog
+        open={!!preview}
+        onOpenChange={(open) => !open && setPreview(null)}
+        fileId={fileId}
+        startSec={preview?.startSec ?? 0}
+        endSec={preview?.endSec ?? 0}
+        title={preview?.title}
+        description={preview?.description}
+        allowCreateClip
+      />
     </div>
   );
 }

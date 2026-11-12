@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { prisma } from '../../config/db.js';
 import { logger } from '../../config/logger.js';
+import { cacheDelete, cacheGet, cacheSet, TtlCache } from '../../utils/cache.js';
 
 export const TRIAL_DAYS = 30;
 
@@ -58,8 +59,16 @@ export async function getAccessState(userId: string): Promise<AccessState> {
   // webhook) invalidate via touchAccessCache().
   const now = new Date();
   const cached = accessCache.get(userId);
-  if (cached && cached.expiresAt > now.getTime()) {
-    return cached.state;
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  // Every paid request runs this check. A shared Redis hit avoids a Neon
+  // round-trip per request across all API instances.
+  const redisCached = await cacheGet<AccessState>(accessCacheKey(userId));
+  if (redisCached) {
+    accessCache.set(userId, redisCached);
+    return redisCached;
   }
 
   const sub = await getOrCreateSubscription(userId);
@@ -87,16 +96,21 @@ export async function getAccessState(userId: string): Promise<AccessState> {
     currentPeriodEnd: sub.currentPeriodEnd?.toISOString() ?? null,
     cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
   };
-  accessCache.set(userId, { state, expiresAt: now.getTime() + ACCESS_CACHE_TTL_MS });
+  accessCache.set(userId, state);
+  await cacheSet(accessCacheKey(userId), state, ACCESS_CACHE_TTL_MS / 1000);
   return state;
 }
 
 // Short-lived access cache (see getAccessState). Invalidated on writes.
+// Bounded so churned end users cannot grow this process's heap forever.
 const ACCESS_CACHE_TTL_MS = 60_000;
-const accessCache = new Map<string, { state: AccessState; expiresAt: number }>();
+const accessCache = new TtlCache<AccessState>(ACCESS_CACHE_TTL_MS, 50_000);
+
+const accessCacheKey = (userId: string) => `access:${userId}`;
 
 export function touchAccessCache(userId: string): void {
   accessCache.delete(userId);
+  void cacheDelete(accessCacheKey(userId));
 }
 
 export async function hasAccess(userId: string): Promise<boolean> {

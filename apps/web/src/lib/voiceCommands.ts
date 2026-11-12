@@ -5,17 +5,31 @@ export type VoiceIntent =
   | { type: "openFile"; query: string };
 
 const NAV_TARGETS: Array<{ keys: string[]; href: string; label: string }> = [
-  { keys: ["dashboard", "home", "overview"], href: "/dashboard", label: "dashboard" },
-  { keys: ["upload"], href: "/upload", label: "upload page" },
-  { keys: ["search"], href: "/search", label: "search page" },
-  { keys: ["clip"], href: "/dashboard/clips", label: "clips" },
-  { keys: ["file", "library", "storage", "drive"], href: "/dashboard/files", label: "files" },
-  { keys: ["video"], href: "/dashboard/videos", label: "videos" },
-  { keys: ["chat"], href: "/dashboard/chat", label: "chat" },
-  { keys: ["setting"], href: "/dashboard/settings", label: "settings" },
-  { keys: ["billing", "subscription", "payment"], href: "/dashboard/billing", label: "billing" },
-  { keys: ["pricing", "plan", "price"], href: "/pricing", label: "pricing" },
+  { keys: ["dashboard", "home", "overview", "main"], href: "/dashboard", label: "dashboard" },
+  { keys: ["upload", "import"], href: "/upload", label: "upload page" },
+  { keys: ["search", "find page", "lookup"], href: "/search", label: "search page" },
+  { keys: ["clip", "clips", "smart clips"], href: "/dashboard/clips", label: "clips" },
+  { keys: ["file", "files", "library", "storage", "drive", "document", "documents"], href: "/dashboard/files", label: "files" },
+  { keys: ["video", "videos", "recording", "recordings"], href: "/dashboard/videos", label: "videos" },
+  { keys: ["chat", "assistant", "messages", "conversation"], href: "/dashboard/chat", label: "chat" },
+  { keys: ["setting", "settings", "preferences", "profile"], href: "/dashboard/settings", label: "settings" },
+  { keys: ["billing", "subscription", "payments", "invoice"], href: "/dashboard/billing", label: "billing" },
+  { keys: ["pricing", "plans", "upgrade", "subscribe"], href: "/pricing", label: "pricing" },
 ];
+
+function matchNav(dest: string, exact = false): { href: string; label: string } | null {
+  const cleaned = dest
+    .replace(/\b(the|page|section|screen|tab)\b/g, " ")
+    .replace(/\b(my|me)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const target = NAV_TARGETS.find((t) =>
+    t.keys.some((k) =>
+      cleaned === k || cleaned === `${k}s` || (!exact && cleaned.includes(k))
+    )
+  );
+  return target ? { href: target.href, label: target.label } : null;
+}
 
 export function normalize(s: string): string {
   return s
@@ -47,13 +61,21 @@ export function parseVoiceCommand(raw: string): VoiceIntent | null {
     return { type: "help" };
   }
 
-  const goMatch = text.match(/^(go to|open page|show page|take me to|navigate to)\s+(.+)$/);
+  const goMatch = text.match(/^(go to|open page|show page|take me to|navigate to|switch to|view)\s+(.+)$/);
   if (goMatch) {
-    const dest = goMatch[2];
-    const target = NAV_TARGETS.find((t) => t.keys.some((k) => dest.includes(k)));
-    if (target) return { type: "navigate", href: target.href, label: target.label };
+    const target = matchNav(goMatch[2]);
+    if (target) return { type: "navigate", ...target };
     return null; // explicit page request we don't know - don't fall through to file noise
   }
+
+  // Bare page names: "open files", "show my videos", "go to clips".
+  const bareMatch = text.match(/^(?:open|show|view|switch to)\s+(?:my\s+|the\s+)?(.+)$/);
+  if (bareMatch) {
+    const target = matchNav(bareMatch[1], true);
+    if (target) return { type: "navigate", ...target };
+  }
+  const exactNav = matchNav(text, true);
+  if (exactNav) return { type: "navigate", ...exactNav };
 
   const searchMatch = text.match(/^(search|look up|look for|find videos? (about|on))\s+(for\s+)?(.+)$/);
   if (searchMatch) {

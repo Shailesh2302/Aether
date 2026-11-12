@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useUpload } from "@/hooks/useUpload";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
   Share2,
   FolderPlus,
   Tag,
+  Loader2,
 } from "lucide-react";
 import {
   formatDate,
@@ -55,7 +56,7 @@ const STORAGE_QUOTA_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB cloud storage per 
 type FilterType = "all" | "video" | "audio" | "image" | "document";
 
 export default function FilesPage() {
-  const { files, fetchFiles, deleteFile, isFetching } = useUpload();
+  const { files, fetchFiles, fetchMoreFiles, deleteFile, isFetching, hasMore } = useUpload();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [view, setView] = useState<"grid" | "list">("grid");
@@ -75,6 +76,34 @@ export default function FilesPage() {
       .then(setCollections)
       .catch(() => undefined);
   }, [fetchFiles]);
+
+  // Re-query the server when the user searches or changes a filter so
+  // results are not limited to the first page already in memory.
+  const filtersInitialised = useRef(false);
+  useEffect(() => {
+    if (!filtersInitialised.current) {
+      filtersInitialised.current = true;
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchFiles({
+        q: search.trim() || undefined,
+        type: filter === "all" ? undefined : filter,
+        favorite: collectionFilter === "favorites" ? true : undefined,
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, filter, collectionFilter, fetchFiles]);
+
+  const refreshList = useCallback(
+    () =>
+      fetchFiles({
+        q: search.trim() || undefined,
+        type: filter === "all" ? undefined : filter,
+        favorite: collectionFilter === "favorites" ? true : undefined,
+      }),
+    [fetchFiles, search, filter, collectionFilter]
+  );
 
   const fileList = useMemo(() => (Array.isArray(files) ? files : []), [files]);
   const collectionFileIds = useMemo(() => {
@@ -117,7 +146,7 @@ export default function FilesPage() {
     if (!next || !next.trim() || next.trim() === file.name) return;
     try {
       await filesApi.rename(file.id, next.trim());
-      await fetchFiles();
+      await refreshList();
       toast({ title: "File renamed" });
     } catch {
       toast({ title: "Rename failed", variant: "destructive" });
@@ -127,7 +156,7 @@ export default function FilesPage() {
   const handleFavorite = async (file: FileItem) => {
     try {
       await filesApi.setFavorite(file.id, !file.isFavorite);
-      await fetchFiles();
+      await refreshList();
     } catch {
       toast({ title: "Couldn't update favorite", variant: "destructive" });
     }
@@ -141,7 +170,7 @@ export default function FilesPage() {
         file.id,
         next.split(",").map((t) => t.trim()).filter(Boolean).slice(0, 20)
       );
-      await fetchFiles();
+      await refreshList();
       toast({ title: "Tags saved" });
     } catch {
       toast({ title: "Couldn't save tags", variant: "destructive" });
@@ -339,6 +368,22 @@ export default function FilesPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+      {hasMore && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => fetchMoreFiles()}
+            disabled={isFetching}
+          >
+            {isFetching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FolderOpen className="h-4 w-4" />
+            )}
+            Load more files
+          </Button>
+        </div>
       )}
       {shareFile && (
         <ShareDialog

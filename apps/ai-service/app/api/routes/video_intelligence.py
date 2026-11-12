@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Query
 from app.api.dependencies import API_KEY_DEP
 from app.services.rag_service import rag_service
-from app.services.llm_service import llm_service
+from app.services.llm_service import llm_service, extract_json
 from app.core.logger import app_logger
 
 router = APIRouter(tags=["video-intelligence"])
@@ -123,20 +123,21 @@ Identify up to {request.top_k} most important moments. Focus on:
             query="Identify important moments in this video transcript",
             context=context_text,
             system_prompt=prompt,
+            temperature=0.2,
+            max_tokens=1000,
+            json_mode=True,
         )
 
-        import json
-        import re
-        
         moments = []
-        json_match = re.search(r'\[.*\]', response, re.DOTALL)
-        if json_match:
-            try:
-                moments_data = json.loads(json_match.group())
-                for m in moments_data:
+        moments_data = extract_json(response)
+        if isinstance(moments_data, dict):
+            moments_data = moments_data.get("moments", [])
+        if isinstance(moments_data, list):
+            for m in moments_data:
+                try:
                     moments.append(HighlightSegment(**m))
-            except Exception as e:
-                app_logger.warning(f"Failed to parse moments: {e}")
+                except Exception as e:
+                    app_logger.warning(f"Skipping invalid moment: {e}")
 
         transcript_segments = []
         for src in sources:
@@ -227,28 +228,24 @@ Limit highlights to {request.max_highlights} most impactful moments.
             query="Generate smart highlights and video summary",
             context=context_text,
             system_prompt=prompt,
+            temperature=0.2,
+            max_tokens=1400,
+            json_mode=True,
         )
-
-        import json
-        import re
 
         highlights = []
         video_summary = "Content analysis complete."
         topics_covered = []
 
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            try:
-                data = json.loads(json_match.group())
-                if "highlights" in data:
-                    for h in data["highlights"]:
-                        highlights.append(HighlightSegment(**h))
-                if "video_summary" in data:
-                    video_summary = data["video_summary"]
-                if "topics_covered" in data:
-                    topics_covered = data["topics_covered"]
-            except Exception as e:
-                app_logger.warning(f"Failed to parse highlights: {e}")
+        data = extract_json(response)
+        if isinstance(data, dict):
+            for h in data.get("highlights") or []:
+                try:
+                    highlights.append(HighlightSegment(**h))
+                except Exception as e:
+                    app_logger.warning(f"Skipping invalid highlight: {e}")
+            video_summary = data.get("video_summary") or video_summary
+            topics_covered = data.get("topics_covered") or []
 
         return SmartHighlightsResponse(
             file_id=request.file_id,
@@ -304,23 +301,19 @@ Return a JSON with:
             query="Identify main topics in this video",
             context=rag_context.context,
             system_prompt=prompt,
+            temperature=0.2,
+            max_tokens=500,
+            json_mode=True,
         )
 
-        import json
-        import re
-
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            try:
-                data = json.loads(json_match.group())
-                return {
-                    "file_id": file_id,
-                    "topics": data.get("topics", []),
-                    "summary": data.get("summary", ""),
-                    "key_themes": data.get("key_themes", [])
-                }
-            except Exception:
-                pass
+        data = extract_json(response)
+        if isinstance(data, dict):
+            return {
+                "file_id": file_id,
+                "topics": data.get("topics", []),
+                "summary": data.get("summary", ""),
+                "key_themes": data.get("key_themes", [])
+            }
 
         return {"file_id": file_id, "topics": [], "summary": "", "key_themes": []}
 
@@ -391,33 +384,28 @@ Rules:
             query="Generate the JSON summary now.",
             context=rag_context.context,
             system_prompt=prompt,
+            temperature=0.2,
+            max_tokens=800,
+            json_mode=True,
         )
-        
-        import json
-        import re
-        
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            try:
-                data = json.loads(json_match.group())
-                total_duration = 0
-                if rag_context.sources:
-                    for source in rag_context.sources:
-                        if hasattr(source, 'metadata') and source.metadata:
-                            dur = source.metadata.get('transcript_duration', 0)
-                            if dur > total_duration:
-                                total_duration = dur
-                
-                return VideoSummaryResponse(
-                    file_id=request.file_id,
-                    summary=data.get("summary", ""),
-                    topics=data.get("topics", []),
-                    key_themes=data.get("key_themes", []),
-                    duration_sec=total_duration
-                )
-            except Exception as e:
-                app_logger.error(f"Error parsing summary JSON: {e}")
-        
+
+        data = extract_json(response)
+        if isinstance(data, dict):
+            total_duration = 0
+            for source in rag_context.sources:
+                if getattr(source, "metadata", None):
+                    dur = source.metadata.get("transcript_duration", 0)
+                    if dur > total_duration:
+                        total_duration = dur
+
+            return VideoSummaryResponse(
+                file_id=request.file_id,
+                summary=data.get("summary", ""),
+                topics=data.get("topics", []),
+                key_themes=data.get("key_themes", []),
+                duration_sec=total_duration
+            )
+
         return VideoSummaryResponse(
             file_id=request.file_id,
             summary="Unable to generate summary",
@@ -462,24 +450,21 @@ async def ask_about_video(
                 limit=5,
             )
             
-            prompt = f"""You are an AI assistant helping users understand video content.
-Based on the following context from the video, answer the user's question.
-
-CONTEXT:
-{rag_context.context}
-
-QUESTION: {request.question}
-
-Provide a helpful, accurate answer. If the context doesn't contain enough information to answer, say so.
-"""
-            
-            response = await llm_service.generate_response(
-                query=request.question,
-                context=rag_context.context,
-                system_prompt=prompt,
+            prompt = (
+                "You are an AI assistant helping users understand video content. "
+                "Answer the user's question using the transcript context below. Be helpful "
+                "and accurate. If the context does not contain enough information to answer, "
+                "say so explicitly.\n\nCONTEXT:\n"
+                f"{rag_context.context}"
             )
-            
-            yield f"data: {json.dumps({'content': response})}\n\n"
+
+            async for chunk in llm_service.generate_stream(
+                query=request.question,
+                system_prompt=prompt,
+                temperature=0.3,
+                max_tokens=900,
+            ):
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
             yield "data: [DONE]\n\n"
             
         except Exception as e:
@@ -637,6 +622,8 @@ async def translate_transcript(
                 query=f"Translate these {len(batch)} lines into {request.target_lang}.",
                 context="",
                 system_prompt=prompt,
+                temperature=0.1,
+                max_tokens=1500,
             )
         except Exception as e:
             app_logger.error(f"Translation batch failed: {e}")
@@ -730,22 +717,21 @@ Generate {request.max_clips} clips that are:
             query="Generate smart clips",
             context=rag_context.context,
             system_prompt=prompt,
+            temperature=0.2,
+            max_tokens=1000,
+            json_mode=True,
         )
-        
-        import json
-        import re
-        
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            try:
-                data = json.loads(json_match.group())
-                clips = [
-                    SmartClip(**clip) for clip in data.get("clips", [])
-                ]
-                return SmartClipsResponse(file_id=request.file_id, clips=clips)
-            except Exception as e:
-                app_logger.error(f"Error parsing clips JSON: {e}")
-        
+
+        data = extract_json(response)
+        if isinstance(data, dict):
+            clips = []
+            for clip in data.get("clips") or []:
+                try:
+                    clips.append(SmartClip(**clip))
+                except Exception as e:
+                    app_logger.warning(f"Skipping invalid clip: {e}")
+            return SmartClipsResponse(file_id=request.file_id, clips=clips)
+
         return SmartClipsResponse(file_id=request.file_id, clips=[])
         
     except Exception as e:

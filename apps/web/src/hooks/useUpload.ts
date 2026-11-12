@@ -5,6 +5,7 @@ export function useUpload() {
   const {
     uploads,
     files,
+    hasMore,
     isLoading,
     isFetching,
     error,
@@ -12,6 +13,7 @@ export function useUpload() {
     removeUpload,
     clearUploads,
     fetchFiles,
+    fetchMoreFiles,
     deleteFile,
     clearError,
   } = useUploadStore();
@@ -29,6 +31,7 @@ export function useUpload() {
   return {
     uploads,
     files,
+    hasMore,
     isLoading,
     isFetching,
     error,
@@ -37,6 +40,7 @@ export function useUpload() {
     removeUpload,
     clearUploads,
     fetchFiles,
+    fetchMoreFiles,
     deleteFile,
     clearError,
   };

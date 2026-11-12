@@ -87,7 +87,10 @@ export function VideoChatInterface({ fileId, onTimestampClick }: VideoChatInterf
             <ChatMessage
               key={message.id}
               message={message}
-              sources={message.role === "assistant" ? sources : []}
+              sources={message.role === "assistant" ? message.sources ?? [] : []}
+              versionConflict={
+                message.role === "assistant" ? message.versionConflict ?? null : null
+              }
               onTimestampClick={onTimestampClick}
             />
           ))

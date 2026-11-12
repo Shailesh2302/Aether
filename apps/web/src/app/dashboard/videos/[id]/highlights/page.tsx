@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SegmentPreviewDialog } from "@/components/video/SegmentPreviewDialog";
 import { 
   ArrowLeft, 
   Loader2, 
@@ -47,6 +48,7 @@ export default function VideoHighlightsPage() {
   const [generating, setGenerating] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [preview, setPreview] = useState<VideoHighlight | null>(null);
 
   const generateHighlights = async (maxHighlights: number = 5) => {
     setGenerating(true);
@@ -250,7 +252,12 @@ export default function VideoHighlightsPage() {
                   <span className="font-mono text-sm bg-muted px-2 py-1 rounded">
                     {formatTime(highlight.start_sec)} - {formatTime(highlight.end_sec)}
                   </span>
-                  <Button size="sm" variant="ghost">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Play highlight"
+                    onClick={() => setPreview(highlight)}
+                  >
                     <Play className="h-4 w-4" />
                   </Button>
                 </div>
@@ -284,7 +291,12 @@ export default function VideoHighlightsPage() {
                     <h4 className="font-medium mb-1">{highlight.title}</h4>
                     <p className="text-sm text-muted-foreground">{highlight.summary}</p>
                   </div>
-                  <Button size="sm" variant="ghost">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Play highlight"
+                    onClick={() => setPreview(highlight)}
+                  >
                     <Play className="h-4 w-4" />
                   </Button>
                 </div>
@@ -293,6 +305,17 @@ export default function VideoHighlightsPage() {
           ))}
         </div>
       )}
+
+      <SegmentPreviewDialog
+        open={!!preview}
+        onOpenChange={(open) => !open && setPreview(null)}
+        fileId={fileId}
+        startSec={preview?.start_sec ?? 0}
+        endSec={preview?.end_sec ?? 0}
+        title={preview?.title}
+        description={preview?.summary}
+        allowCreateClip
+      />
     </div>
   );
 }

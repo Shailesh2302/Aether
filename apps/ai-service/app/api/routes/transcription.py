@@ -28,6 +28,9 @@ class VideoTranscriptionResponse(BaseModel):
 async def transcribe_audio(
     file: UploadFile = File(...),
     language: Optional[str] = None,
+    command: bool = False,
+    beam_size: Optional[int] = None,
+    vad_filter: Optional[bool] = None,
     api_key: API_KEY_DEP = None,
 ) -> TranscriptionResponse:
     try:
@@ -45,6 +48,9 @@ async def transcribe_audio(
             result: TranscriptionResult = await whisper_service.transcribe(
                 audio_path=tmp_path,
                 language=language,
+                command=command,
+                beam_size=beam_size,
+                vad_filter=vad_filter,
             )
 
             segments = [
@@ -75,6 +81,9 @@ async def transcribe_audio(
 async def transcribe_video(
     file: UploadFile = File(...),
     language: Optional[str] = None,
+    command: bool = False,
+    beam_size: Optional[int] = None,
+    vad_filter: Optional[bool] = None,
     api_key: API_KEY_DEP = None,
 ) -> VideoTranscriptionResponse:
     try:
@@ -95,6 +104,9 @@ async def transcribe_video(
                 result: TranscriptionResult = await whisper_service.transcribe(
                     audio_path=audio_path,
                     language=language,
+                    command=command,
+                    beam_size=beam_size,
+                    vad_filter=vad_filter,
                 )
 
                 segments = [
@@ -128,6 +140,9 @@ async def transcribe_video(
 @router.post("/transcription/from-url", response_model=TranscriptionResponse)
 async def transcribe_from_url(
     request: TranscriptionRequest,
+    command: bool = False,
+    beam_size: Optional[int] = None,
+    vad_filter: Optional[bool] = None,
     api_key: API_KEY_DEP = None,
 ) -> TranscriptionResponse:
     safe_path = validate_readable_path(request.audio_path)
@@ -135,6 +150,9 @@ async def transcribe_from_url(
         result: TranscriptionResult = await whisper_service.transcribe(
             audio_path=safe_path,
             language=request.language,
+            command=command,
+            beam_size=beam_size,
+            vad_filter=vad_filter,
         )
 
         segments = [

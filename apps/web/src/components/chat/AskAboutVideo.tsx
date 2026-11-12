@@ -21,28 +21,29 @@ interface AskAboutVideoProps {
   className?: string;
 }
 
-function parseSSEStream(chunk: string): string {
-  let result = "";
-  const lines = chunk.split("\n");
-  for (const line of lines) {
-    if (line.startsWith("data: ")) {
-      const data = line.slice(6).trim();
-      if (!data || data === "[DONE]") continue;
-      try {
-        const parsed = JSON.parse(data);
-        if (typeof parsed.content === "string") {
-          result += parsed.content;
-        } else if (typeof parsed.message === "string") {
-          result += parsed.message;
-        } else if (typeof parsed.text === "string") {
-          result += parsed.text;
-        }
-      } catch {
-        // Non-JSON payload (e.g. session id) - ignore.
+function parseSSEBlock(block: string): { content: string; error?: string } {
+  let content = "";
+  for (const line of block.split("\n")) {
+    if (!line.startsWith("data:")) continue;
+    const data = line.slice(5).trim();
+    if (!data || data === "[DONE]") continue;
+    try {
+      const parsed = JSON.parse(data);
+      if (typeof parsed.error === "string" && parsed.error) {
+        return { content, error: parsed.error };
       }
+      if (typeof parsed.content === "string") {
+        content += parsed.content;
+      } else if (typeof parsed.message === "string") {
+        content += parsed.message;
+      } else if (typeof parsed.text === "string") {
+        content += parsed.text;
+      }
+    } catch {
+      // Non-JSON payload (e.g. keepalive) - ignore.
     }
   }
-  return result;
+  return { content };
 }
 
 export function AskAboutVideo({
@@ -108,17 +109,37 @@ export function AskAboutVideo({
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let fullContent = "";
+      let buffer = "";
+
+      const handleBlock = (block: string) => {
+        const parsed = parseSSEBlock(block);
+        if (parsed.error) throw new Error(parsed.error);
+        if (parsed.content) {
+          fullContent += parsed.content;
+          setStreamingContent(fullContent);
+        }
+      };
 
       if (reader) {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          const parsed = parseSSEStream(chunk);
-          fullContent += parsed;
-          setStreamingContent(fullContent);
+          // Buffer until a full SSE event (blank-line delimited) arrives, so
+          // events split across network chunks are not dropped.
+          buffer += decoder.decode(value, { stream: true });
+          buffer = buffer.replace(/\r\n/g, "\n");
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary !== -1) {
+            const block = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            handleBlock(block);
+            boundary = buffer.indexOf("\n\n");
+          }
         }
+        buffer += decoder.decode();
+        buffer = buffer.replace(/\r\n/g, "\n").trim();
+        if (buffer) handleBlock(buffer);
       }
 
       const assistantMessage: Message = {
@@ -134,6 +155,7 @@ export function AskAboutVideo({
       setStreamingContent("");
     } catch (error) {
       console.error("Error asking question:", error);
+      setStreamingContent("");
       const detail =
         error instanceof Error && error.message
           ? error.message

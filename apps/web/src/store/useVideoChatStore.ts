@@ -34,7 +34,7 @@ export const useVideoChatStore = create<VideoChatState>((set, get) => ({
   setFileId: (fileId) => set({ fileId }),
 
   sendMessage: async (content) => {
-    const { fileId, transcript, messages: currentMessages } = get();
+    const { fileId } = get();
 
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -42,41 +42,63 @@ export const useVideoChatStore = create<VideoChatState>((set, get) => ({
       content,
       createdAt: new Date().toISOString(),
     };
+    const assistantId = `msg-${Date.now() + 1}`;
 
     set((state) => ({
-      messages: [...state.messages, userMessage],
+      messages: [
+        ...state.messages,
+        userMessage,
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          createdAt: new Date().toISOString(),
+        },
+      ],
       isLoading: true,
       error: null,
+      sources: [],
     }));
 
     try {
-      const history = currentMessages.slice(-20);
-      const response = await chatApi.send(
-        content,
-        history,
-        fileId || undefined,
-        transcript.length > 0 ? transcript : undefined
-      );
-
-      const assistantMessage: ChatMessage = {
-        id: `msg-${Date.now() + 1}`,
-        role: "assistant",
-        content: response.message,
-        createdAt: new Date().toISOString(),
-        sources: response.sources ?? [],
-        versionConflict: response.versionConflict ?? null,
-      };
+      const response = await chatApi.stream(content, { fileId: fileId || undefined }, {
+        onSources: (sources, _versionNotes, versionConflict) => {
+          set((state) => ({
+            sources,
+            messages: state.messages.map((m) =>
+              m.id === assistantId ? { ...m, sources, versionConflict } : m
+            ),
+          }));
+        },
+        onChunk: (chunk) => {
+          set((state) => ({
+            messages: state.messages.map((m) =>
+              m.id === assistantId ? { ...m, content: m.content + chunk } : m
+            ),
+          }));
+        },
+      });
 
       set((state) => ({
-        messages: [...state.messages, assistantMessage],
+        messages: state.messages.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                content: response.message,
+                sources: response.sources ?? m.sources,
+                versionConflict: response.versionConflict ?? m.versionConflict,
+              }
+            : m
+        ),
         sources: response.sources ?? [],
         isLoading: false,
       }));
     } catch (error) {
-      set({
+      set((state) => ({
+        messages: state.messages.filter((m) => !(m.id === assistantId && !m.content)),
         error: extractErrorMessage(error, "Failed to send message"),
         isLoading: false,
-      });
+      }));
     }
   },
 

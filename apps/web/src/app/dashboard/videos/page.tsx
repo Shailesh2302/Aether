@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUpload } from "@/hooks/useUpload";
@@ -28,6 +28,7 @@ import {
   Activity,
   Video as VideoIcon,
   MoreHorizontal,
+  Loader2,
 } from "lucide-react";
 import {
   formatDuration,
@@ -55,14 +56,32 @@ type StatusFilter = "all" | "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
 export default function VideosPage() {
   const router = useRouter();
-  const { files, fetchFiles, isFetching } = useUpload();
+  const { files, fetchFiles, fetchMoreFiles, isFetching, hasMore } = useUpload();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedVideo, setSelectedVideo] = useState<FileItem | null>(null);
 
   useEffect(() => {
-    fetchFiles();
+    fetchFiles({ type: "video" });
   }, [fetchFiles]);
+
+  // Search and status live on the server so they cover the whole library,
+  // not just the first page held in memory.
+  const filtersInitialised = useRef(false);
+  useEffect(() => {
+    if (!filtersInitialised.current) {
+      filtersInitialised.current = true;
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchFiles({
+        type: "video",
+        q: search.trim() || undefined,
+        status: statusFilter === "all" ? undefined : statusFilter,
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, statusFilter, fetchFiles]);
 
   const videos = useMemo(() => {
     const list = Array.isArray(files) ? files : [];
@@ -143,6 +162,23 @@ export default function VideosPage() {
               onNavigate={(path) => router.push(path)}
             />
           ))}
+        </div>
+      )}
+
+      {hasMore && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => fetchMoreFiles()}
+            disabled={isFetching}
+          >
+            {isFetching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <VideoIcon className="h-4 w-4" />
+            )}
+            Load more videos
+          </Button>
         </div>
       )}
 

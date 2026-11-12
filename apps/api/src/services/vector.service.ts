@@ -261,10 +261,12 @@ class VectorService {
   async scrollPoints(
     collection: string,
     fileId: string,
-    limit = 500
+    limit = 500,
+    options?: { timeoutMs?: number }
   ): Promise<Array<{ text: string; chunkIndex: number; metadata: Record<string, unknown> }>> {
     try {
-      const response = await this.fetchWithRetry(`${this.baseUrl}/collections/${collection}/points/scroll`, {
+      const url = `${this.baseUrl}/collections/${collection}/points/scroll`;
+      const init: RequestInit = {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
@@ -272,7 +274,12 @@ class VectorService {
           with_payload: true,
           filter: { must: [{ key: 'file_id', match: { value: fileId } }] },
         }),
-      });
+      };
+      // Status polling must fail fast: waking a sleeping Qdrant is worth
+      // waiting for during ingest, but not while a user waits for a badge.
+      const response = options?.timeoutMs
+        ? await fetch(url, { ...init, signal: AbortSignal.timeout(options.timeoutMs) })
+        : await this.fetchWithRetry(url, init);
       if (!response.ok) return [];
       const data = await response.json() as any;
       const points: Array<{ payload?: Record<string, unknown> }> = data.result?.points || [];

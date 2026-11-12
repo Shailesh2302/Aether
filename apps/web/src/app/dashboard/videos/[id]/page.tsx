@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useUpload } from "@/hooks/useUpload";
 import { useVideoChat } from "@/hooks/useVideoChat";
 import { useVideoIntelligence } from "@/hooks/useVideoIntelligence";
-import { videoApi, type SubtitleTrack } from "@/lib/api";
+import { filesApi, videoApi, type FileItem, type SubtitleTrack } from "@/lib/api";
 import { NotesPanel } from "@/components/notes/NotesPanel";
 import { ShareDialog } from "@/components/share/ShareDialog";
 import { ChaptersList } from "@/components/video/ChaptersList";
@@ -71,9 +71,44 @@ export default function VideoDetailPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [subtitles, setSubtitles] = useState<SubtitleTrack[]>([]);
   const [shareOpen, setShareOpen] = useState(false);
+  const [fetchedFile, setFetchedFile] = useState<FileItem | null>(null);
+  const [fileLoading, setFileLoading] = useState(true);
 
   const allFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
-  const file = allFiles.find((f) => f.id === fileId);
+  const storeFile = allFiles.find((f) => f.id === fileId) ?? null;
+  const file = storeFile ?? fetchedFile;
+
+  // Direct navigation / refresh has an empty upload store. Fetch the file
+  // by id instead of incorrectly claiming the video does not exist.
+  useEffect(() => {
+    if (!fileId) {
+      setFileLoading(false);
+      return;
+    }
+    if (storeFile) {
+      setFetchedFile(null);
+      setFileLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setFileLoading(true);
+    filesApi
+      .get(fileId)
+      .then((data) => {
+        if (!cancelled) setFetchedFile(data);
+      })
+      .catch(() => {
+        if (!cancelled) setFetchedFile(null);
+      })
+      .finally(() => {
+        if (!cancelled) setFileLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId, storeFile]);
 
   const handlePlayerReady = useCallback((player: {
     currentTime: number;
@@ -147,18 +182,31 @@ export default function VideoDetailPage() {
     return (
       <div className="p-6 lg:p-8">
         <div className="text-center py-12">
-          <h2 className="text-xl font-semibold mb-2">Video not found</h2>
-          <p className="text-muted-foreground mb-4">
-            The requested video could not be found.
-          </p>
-          <Button variant="outline" onClick={() => router.push("/dashboard/videos")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Videos
-          </Button>
+          {fileLoading ? (
+            <>
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+              <p className="text-muted-foreground">Loading video…</p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-semibold mb-2">Video not found</h2>
+              <p className="text-muted-foreground mb-4">
+                The requested video could not be found, or you no longer have
+                access to it.
+              </p>
+              <Button variant="outline" onClick={() => router.push("/dashboard/videos")}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Videos
+              </Button>
+            </>
+          )}
         </div>
       </div>
     );
   }
+
+  const initialSeek = seekTime ? Number.parseFloat(seekTime) : 0;
+  const safeInitialSeek = Number.isFinite(initialSeek) && initialSeek > 0 ? initialSeek : 0;
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col">
@@ -269,8 +317,9 @@ export default function VideoDetailPage() {
           <div className="p-4">
             {file.url ? (
               <VideoPlayer
+                key={`${file.id}-${safeInitialSeek}`}
                 src={file.url}
-                initialTime={0}
+                initialTime={safeInitialSeek}
                 onTimeUpdate={handleTimeUpdate}
                 onReady={handlePlayerReady}
                 subtitles={subtitles}

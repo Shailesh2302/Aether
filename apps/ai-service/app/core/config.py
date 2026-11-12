@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 2048
     LLM_TIMEOUT_SECONDS: float = 180.0
     LLM_REASONING_EFFORT: str = "low"
+    LLM_JSON_MODE: bool = False
     
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
@@ -27,6 +28,11 @@ class Settings(BaseSettings):
 
     WHISPER_MODEL: str = "base"
     WHISPER_DEVICE: str = "cpu"
+    WHISPER_BEAM_SIZE: int = 2
+    WHISPER_CONCURRENCY: int = 1
+    WHISPER_VAD_FILTER: bool = True
+    WHISPER_WARMUP: bool = True
+    WHISPER_CPU_THREADS: int = 0
 
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 100

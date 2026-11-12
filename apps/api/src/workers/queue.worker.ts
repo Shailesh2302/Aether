@@ -77,7 +77,15 @@ async function processClipJob(redis: Redis, job: ClipJobData & { id: string }) {
   ).catch(() => undefined);
 }
 
+const CLIP_WORKER_HEARTBEAT_KEY = 'aether:worker:clip:heartbeat';
+
 async function pollQueues(redis: Redis) {
+  // Advertise this consumer so the API cuts inline when no worker is alive
+  // instead of leaving jobs stuck in Redis forever.
+  await redis
+    .set(CLIP_WORKER_HEARTBEAT_KEY, '1', 'EX', 30)
+    .catch((err) => logger.warn({ err }, 'Clip worker heartbeat failed'));
+
   for (const [type, queueKey] of Object.entries(QUEUES)) {
     try {
       // Non-blocking pop: a dead connection can leave BRPOP(0)

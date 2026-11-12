@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { SegmentPreviewDialog } from "@/components/video/SegmentPreviewDialog";
 import { 
   ArrowLeft, 
   Loader2, 
@@ -41,6 +42,7 @@ export default function VideoTopicsPage() {
   const [loading, setLoading] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [sortBy, setSortBy] = useState<"time" | "relevance">("relevance");
+  const [preview, setPreview] = useState<VideoTopic | null>(null);
 
   const detectTopics = async () => {
     setDetecting(true);
@@ -249,7 +251,12 @@ export default function VideoTopicsPage() {
                       <Progress value={topic.relevance_score * 100} className="h-2" />
                     </div>
                   </div>
-                  <Button size="sm" variant="ghost">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Play topic"
+                    onClick={() => setPreview(topic)}
+                  >
                     <Play className="h-4 w-4" />
                   </Button>
                 </div>
@@ -258,6 +265,17 @@ export default function VideoTopicsPage() {
           ))}
         </div>
       )}
+
+      <SegmentPreviewDialog
+        open={!!preview}
+        onOpenChange={(open) => !open && setPreview(null)}
+        fileId={fileId}
+        startSec={preview?.timestamp_sec ?? 0}
+        endSec={(preview?.timestamp_sec ?? 0) + 60}
+        title={preview?.topic}
+        description={`Topic preview · ${(preview?.keywords ?? []).join(", ")}`}
+        allowCreateClip
+      />
     </div>
   );
 }

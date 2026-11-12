@@ -162,7 +162,7 @@ class AIService {
     }
   }
 
-  async createEmbedding(input: string | string[]): Promise<number[]> {
+  async createEmbedding(input: string | string[], timeoutMs = 60_000): Promise<number[]> {
     try {
       const textInput = Array.isArray(input) ? input : [input];
       
@@ -173,7 +173,7 @@ class AIService {
           input: textInput,
           model: this.embeddingModel,
         }),
-      }, 60_000);
+      }, timeoutMs);
 
       if (!response.ok) {
         const error = await response.text();

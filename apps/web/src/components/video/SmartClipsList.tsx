@@ -26,8 +26,8 @@ export function SmartClipsList({
   const loadClips = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await clipsApi.list(fileId);
-      setClips(data || []);
+      const page = await clipsApi.list(fileId, { limit: 100 });
+      setClips(page.clips);
     } catch (error) {
       console.error("Failed to load clips:", error);
     } finally {

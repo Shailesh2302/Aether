@@ -41,6 +41,10 @@ class QueueService {
   private documentQueueName = 'aether:document:queue';
   private clipQueueName = 'aether:clip:queue';
 
+  // The queue worker refreshes this key. Without it, a job pushed to Redis
+  // would sit there forever when only the API process is running.
+  private clipWorkerHeartbeatKey = 'aether:worker:clip:heartbeat';
+
   constructor() {
     this.initRedis();
   }
@@ -144,7 +148,7 @@ class QueueService {
     return jobId;
   }
 
-  async addClipGenerationJob(data: { fileId: string; filePath: string; startTime: number; endTime: number; userId: string; clipId?: string }): Promise<string> {
+  async addClipGenerationJob(data: { fileId: string; filePath: string; startTime: number; endTime: number; userId: string; clipId?: string }): Promise<string | null> {
     const jobId = this.createJobId('clip');
 
     const job: ClipJobData = {
@@ -162,14 +166,29 @@ class QueueService {
       status: 'Queued',
     };
 
-    await this.safeRedisOperation('lpush', async (redis) => {
+    const enqueued = await this.safeRedisOperation('lpush', async (redis) => {
       await redis.lpush(this.clipQueueName, JSON.stringify(job));
       await redis.hset(`aether:job:${jobId}`, 'data', JSON.stringify(job));
       await redis.hset(`aether:job:${jobId}`, 'status', 'Queued');
+      return true;
     });
+
+    if (!enqueued) {
+      logger.warn({ jobId, fileId: data.fileId }, 'Clip job was not queued');
+      return null;
+    }
 
     logger.info({ jobId, fileId: data.fileId }, 'Clip generation job added to queue');
     return jobId;
+  }
+
+  /** True when a live queue worker is consuming clip jobs. */
+  async hasClipWorker(): Promise<boolean> {
+    if (!this.redis || !this.redisConnected) return false;
+    const value = await this.safeRedisOperation('clip-worker-heartbeat', async (redis) => {
+      return await redis.get(this.clipWorkerHeartbeatKey);
+    });
+    return Boolean(value);
   }
 
   async updateJobStatus(jobId: string, status: string): Promise<void> {

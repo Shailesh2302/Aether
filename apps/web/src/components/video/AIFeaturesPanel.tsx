@@ -23,6 +23,7 @@ import {
   VideoTopic,
   clipsApi
 } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 interface AIFeaturesPanelProps {
   fileId: string;
@@ -74,6 +75,7 @@ export function AIFeaturesPanel({
   className,
 }: AIFeaturesPanelProps) {
   const [expandedSection, setExpandedSection] = useState<string | null>("moments");
+  const [creatingClip, setCreatingClip] = useState<string | null>(null);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -93,15 +95,40 @@ export function AIFeaturesPanel({
       onCreateClip(startSec, endSec);
       return;
     }
+    const key = `${startSec}-${endSec}`;
+    if (creatingClip) return;
+    setCreatingClip(key);
     try {
-      await clipsApi.create({
+      // A bare metadata row never produces a playable file, so generate
+      // the actual cut and wait for the renderer before reporting success.
+      const { clip } = await clipsApi.generate({
         fileId,
         startTime: startSec,
         endTime: endSec,
         title: `Clip ${formatTime(startSec)} - ${formatTime(endSec)}`,
       });
+      const finished = await clipsApi.waitUntilReady(clip.id);
+      if (finished.status === "COMPLETED") {
+        toast({
+          title: "Clip saved",
+          description: "Find it in your Clips library.",
+        });
+      } else {
+        toast({
+          title: "Clip failed",
+          description: "The video could not be cut. Please try again.",
+          variant: "destructive",
+        });
+      }
     } catch (err) {
       console.error("Failed to create clip:", err);
+      toast({
+        title: "Couldn't create clip",
+        description: "Please try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingClip(null);
     }
   };
 
@@ -221,10 +248,15 @@ export function AIFeaturesPanel({
                             e.stopPropagation();
                             handleCreateClip(moment.start_sec, moment.end_sec);
                           }}
-                          className="p-1 hover:bg-primary/10 rounded"
+                          className="p-1 hover:bg-primary/10 rounded disabled:opacity-50"
                           title="Create clip"
+                          disabled={creatingClip === `${moment.start_sec}-${moment.end_sec}`}
                         >
-                          <Scissors className="h-3 w-3" />
+                          {creatingClip === `${moment.start_sec}-${moment.end_sec}` ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Scissors className="h-3 w-3" />
+                          )}
                         </button>
                         <Play className="h-3 w-3" />
                       </div>
@@ -284,10 +316,15 @@ export function AIFeaturesPanel({
                             e.stopPropagation();
                             handleCreateClip(highlight.start_sec, highlight.end_sec);
                           }}
-                          className="p-1 hover:bg-primary/10 rounded"
+                          className="p-1 hover:bg-primary/10 rounded disabled:opacity-50"
                           title="Create clip"
+                          disabled={creatingClip === `${highlight.start_sec}-${highlight.end_sec}`}
                         >
-                          <Scissors className="h-3 w-3" />
+                          {creatingClip === `${highlight.start_sec}-${highlight.end_sec}` ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Scissors className="h-3 w-3" />
+                          )}
                         </button>
                         <Play className="h-3 w-3" />
                       </div>

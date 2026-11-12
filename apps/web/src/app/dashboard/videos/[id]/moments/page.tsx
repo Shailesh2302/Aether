@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { SegmentPreviewDialog } from "@/components/video/SegmentPreviewDialog";
 import { 
   ArrowLeft, 
   Loader2, 
@@ -45,6 +46,7 @@ export default function VideoMomentsPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [filter, setFilter] = useState<"all" | "high" | "medium" | "low">("all");
   const [sortBy, setSortBy] = useState<"time" | "importance">("importance");
+  const [preview, setPreview] = useState<VideoMoment | null>(null);
 
   const detectMoments = async (topK: number = 10) => {
     setAnalyzing(true);
@@ -274,7 +276,12 @@ export default function VideoMomentsPage() {
                           </div>
                           <p className="text-sm">{moment.description}</p>
                         </div>
-                        <Button size="sm" variant="ghost">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label="Play moment"
+                          onClick={() => setPreview(moment)}
+                        >
                           <Play className="h-4 w-4" />
                         </Button>
                       </div>
@@ -286,6 +293,17 @@ export default function VideoMomentsPage() {
           ))}
         </div>
       )}
+
+      <SegmentPreviewDialog
+        open={!!preview}
+        onOpenChange={(open) => !open && setPreview(null)}
+        fileId={fileId}
+        startSec={preview?.start_sec ?? 0}
+        endSec={preview?.end_sec ?? 0}
+        title={preview?.description ?? "Video moment"}
+        description={preview?.description}
+        allowCreateClip
+      />
     </div>
   );
 }

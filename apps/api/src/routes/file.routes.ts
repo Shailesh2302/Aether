@@ -8,6 +8,7 @@ import dns from 'dns/promises';
 import net from 'net';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/db.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { authenticateMedia } from '../middleware/mediaAuth.js';
@@ -41,6 +42,12 @@ const publicFileUrl = (req: Request, relativeOrAbsolute: string | null, fallback
   return `${req.protocol}://${req.get('host')}${normalized}`;
 };
 
+// AI feature payloads (moments/highlights/topics/smart clips) are cached in
+// file.metadata for fast regeneration. They can be tens of kilobytes each and
+// are served by their own endpoints, so never ship them from file listing
+// responses where 50 rows would multiply the payload.
+const HEAVY_METADATA_KEYS = new Set(['moments', 'highlights', 'topics', 'smartClips']);
+
 const serializeFile = (file: {
   id: string; name: string; originalName: string; mimeType: string;
   size: bigint | number; path: string; url: string | null; status: unknown;
@@ -48,6 +55,11 @@ const serializeFile = (file: {
   tags?: string[]; isFavorite?: boolean; sourceUrl?: string | null;
 }) => {
   const meta = (file.metadata as Record<string, unknown> | null) ?? null;
+  const publicMeta = meta
+    ? Object.fromEntries(
+        Object.entries(meta).filter(([key]) => !HEAVY_METADATA_KEYS.has(key))
+      )
+    : null;
   return {
     id: file.id,
     name: file.name,
@@ -57,7 +69,7 @@ const serializeFile = (file: {
     path: file.path,
     url: file.url,
     status: file.status,
-    metadata: meta,
+    metadata: publicMeta,
     tags: file.tags ?? [],
     isFavorite: file.isFavorite ?? false,
     sourceUrl: file.sourceUrl ?? null,
@@ -77,11 +89,53 @@ const validateRequest = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
+const parseListLimit = (raw: unknown, fallback: number, max = 200): number => {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.floor(n), max);
+};
+
 router.get('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const limit = parseListLimit(req.query.limit, 50);
+    const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : undefined;
+    const search = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
+    const status = typeof req.query.status === 'string' ? req.query.status.toUpperCase() : '';
+    const type = typeof req.query.type === 'string' ? req.query.type.toLowerCase() : '';
+    const favorite = req.query.favorite === '1' || req.query.favorite === 'true';
+
+    const where: Prisma.FileWhereInput = { userId: req.user!.userId };
+
+    if (['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'].includes(status)) {
+      where.status = status as Prisma.FileWhereInput['status'];
+    }
+    if (favorite) where.isFavorite = true;
+
+    if (['video', 'audio', 'image'].includes(type)) {
+      where.mimeType = { startsWith: `${type}/` };
+    } else if (type === 'document') {
+      where.NOT = [
+        { mimeType: { startsWith: 'video/' } },
+        { mimeType: { startsWith: 'audio/' } },
+        { mimeType: { startsWith: 'image/' } },
+      ];
+    }
+
+    if (search) {
+      where.OR = [
+        { originalName: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { tags: { has: search } },
+      ];
+    }
+
+    // Fetch one extra row to determine whether another page exists without
+    // a COUNT(*) over the user's whole library on every request.
     const files = await prisma.file.findMany({
-      where: { userId: req.user!.userId },
-      orderBy: { createdAt: 'desc' },
+      where,
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: {
         id: true,
         name: true,
@@ -90,6 +144,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
         size: true,
         status: true,
         url: true,
+        metadata: true,
         tags: true,
         isFavorite: true,
         sourceUrl: true,
@@ -97,8 +152,15 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
         updatedAt: true,
       },
     });
-    const serialized = files.map((f) => serializeFile(f as never));
-    res.json({ files: serialized });
+
+    const hasMore = files.length > limit;
+    const page = hasMore ? files.slice(0, limit) : files;
+    const serialized = page.map((f) => serializeFile(f as never));
+    res.json({
+      files: serialized,
+      nextCursor: hasMore && page.length > 0 ? page[page.length - 1].id : null,
+      hasMore,
+    });
   } catch (error) {
     next(error);
   }
